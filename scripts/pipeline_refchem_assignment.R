@@ -1,6 +1,58 @@
 # NAM-integration-pilot workflow 1
 # Selection of MoA-associated reference chemicals by literature association
 
+assignRefChems <- function(
+    homedir = getwd(),
+    filename = "NIHMS1537541-supplement-Supplement1.xlsx",
+    sheet = "S12 Data",
+    fileurl = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6784312/bin/NIHMS1537541-supplement-Supplement1.xlsx",
+    support = 5,
+    cluster_method = "average",
+    dend_height = 0.8,
+    cluster_size = 3
+) {
+    #' runtime function for reference chemical assignment from RefChemDB
+    #' @param homedir string | top-level directory (**assumes that the
+    #'  sub-directory \data exists**)
+    #' @param filename string | name of supplemental file containing S12 table
+    #' @param sheet string | name of spreadsheet containing S12 table
+    #' @param fileurl string | url of supplemental file (if not saved in \data
+    #'  sub-directory)
+    #' @param support double | minimum level of support for retaining chemical-
+    #'  target annotations
+    #' @param cluster_method string | method for performing hierarchical 
+    #'  clustering. See hclust() documentation for options.
+    #' @param dend_height double | height of dendrogram at which to cut for
+    #'  identifying clusters. Must be value between 0 and 1.
+    #' @param cluster_size double | minimum number of chemicals assigned to 
+    #'  cluster in order to retain that cluster
+    #' @return tibble of reference chemicals and assigned clusters
+    #' @example refchems <- assignRefChems()
+    #' @export
+    # load refchemdb
+    refchemdb <- loadRefChemDB(homedir, filename, sheet, fileurl)
+
+    # filter for threshold support level
+    refchem_filt <- filterSupport(refchemdb, support)
+
+    # cluster target_mode annotations based on Jaccard distance
+    refchem_jaccard <- calcJaccard(refchem_filt)
+    refchem_clusters <- clusterTargets(
+        refchem_jaccard,
+        cluster_method,
+        dend_height
+    )
+
+    # assign reference chemicals to target_mode clusters
+    refchem_assign <- assignChemsToClusters(
+        refchem_filt,
+        refchem_clusters,
+        cluster_size
+    )
+
+    return(refchem_assign)
+}
+
 loadRefChemDB <- function(
     homedir = getwd(),
     filename = "NIHMS1537541-supplement-Supplement1.xlsx",
@@ -19,20 +71,23 @@ loadRefChemDB <- function(
     return(refchemdb)
 }
 
-filterSupport <- function(refchemdb, support) {
+filterSupport <- function(refchemdb, support_lvl) {
     require(dplyr)
     require(tidyr)
 
     # filter refchemdb for threshold support level + distinct mode
     # (i.e. not unspecified)
     filtered <- refchemdb %>%
-        filter(support >= support & mode %in% c("Negative", "Positive")) %>%
+        filter(
+            (support >= support_lvl) &
+            (mode %in% c("Negative", "Positive"))
+        ) %>%
         distinct(dsstox_substance_id, target, mode, .keep_all = TRUE)
 
     # for multiple modes annotated for same chemical/target,
     # keep mode with the highest support +
     # concatenate target/mode into single annotation
-    filtered <- filtered
+    filtered <- filtered %>%
         group_by(dsstox_substance_id, target) %>%
         mutate(
             mode_count = n(),
@@ -52,11 +107,11 @@ filterSupport <- function(refchemdb, support) {
 }
 
 calcJaccard <- function(filtered) {
-    # convert filtered refchemdb to wide form (target_mode x chemical), 
+    # convert filtered refchemdb to wide form (target_mode x chemical),
     # filling in missing pairs as inactive
     widened <- filtered %>%
         filter(mode_keep == TRUE) %>%
-        mutate(active == 1) %>%
+        mutate(active = 1) %>%
         pivot_wider(
             id_cols = target_mode,
             names_from = dsstox_substance_id,
@@ -92,7 +147,7 @@ clusterTargets <- function(jaccard_obj, method = "average", dend_height = 0.8) {
     return(clusters)
 }
 
-assignChemsToClusters <- function(filtered, clusters, cluster_size = 5) {
+assignChemsToClusters <- function(filtered, clusters, cluster_size = 3) {
     require(tidyr)
     require(dplyr)
 

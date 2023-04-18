@@ -1,16 +1,22 @@
 # NAM-integration-pilot workflow 2
 # Generation of Reference Chemical-Associated Chemicals by univariate testing
 
-analyzeHTTrANOVA <- function(filepath.data, filepath.ref, col.httr.type,
-                             col.ref.class = "cluster",
-                             col.ref.dtxsid = "dsstox_substance_id",
-                             col.ref.name = "name", ref.class.clean = TRUE,
-                             ref.class.curate = TRUE,
-                             coff.hitc = 0.9, coff.toc = 1.5,
-                             col.httr.metric = "bmd_log",
-                             metric.fill = 3, class.count = 3,
-                             p.adjust.method = "fdr",
-                             coff.aov.p = 0.05, coff.posthoc.p = 0.05) {
+library(tidyr)
+library(dplyr)
+
+
+analyzeHTTrANOVA <- function(
+  filepath.data, filepath.ref, col.httr.type,
+  col.ref.class = "cluster",
+  col.ref.dtxsid = "dsstox_substance_id",
+  col.ref.name = "name", ref.class.clean = TRUE,
+  ref.class.curate = TRUE,
+  coff.hitc = 0.9, coff.toc = 1.5,
+  col.httr.metric = "bmd_log",
+  metric.fill = 3, class.count = 3,
+  p.adjust.method = "fdr",
+  coff.aov.p = 0.05, coff.posthoc.p = 0.05
+) {
   #' runtime function for ANOVA gene- or signature-level analysis
   #' @param filepath.data character | path of .RData file containing HTTr
   #'   concentration-response data
@@ -48,7 +54,8 @@ analyzeHTTrANOVA <- function(filepath.data, filepath.ref, col.httr.type,
   #' @export
   # load httr/ref data
   httr <- loadData(filepath.data)
-  ref <- loadRefList(filepath.ref,
+  ref <- loadRefList(
+    filepath.ref,
     col.dtxsid = col.ref.dtxsid,
     col.name = col.ref.name,
     col.class = col.ref.class,
@@ -57,13 +64,17 @@ analyzeHTTrANOVA <- function(filepath.data, filepath.ref, col.httr.type,
   )
 
   # filter httr data for refs/active genes
-  httr.filtered <- filterData(httr, ref,
+  httr.filtered <- filterData(
+    httr,
+    ref,
     col.type = col.httr.type,
     coff.hitc = coff.hitc, coff.toc = coff.toc
   )
 
   # widen httr data + remove underrepresented ref classes
-  httr.wide <- widenData(httr.filtered, ref,
+  httr.wide <- widenData(
+    httr.filtered,
+    ref,
     col.type = col.httr.type,
     col.metric = col.httr.metric,
     metric.fill = metric.fill,
@@ -75,7 +86,9 @@ analyzeHTTrANOVA <- function(filepath.data, filepath.ref, col.httr.type,
 
   # conduct Tukey's HSD posthoc for ref classes across significant
   # genes/signatures
-  posthoc.return <- calcPosthoc(httr.wide, aov.return$aov.p.adjust,
+  posthoc.return <- calcPosthoc(
+    httr.wide,
+    aov.return$aov.p.adjust,
     aov.p.coff = coff.aov.p,
     posthoc.p.coff = coff.posthoc.p
   )
@@ -205,6 +218,7 @@ cleanRefLabels <- function(ref, col.class) {
     }
     return(entry.return)
   }
+  
   ref.list <- sapply(ref.list, removeDupNames)
 
   # integrate clean list into full df

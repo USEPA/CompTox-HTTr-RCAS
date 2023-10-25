@@ -83,6 +83,23 @@ makeDirectory <- function(directory_name) {
     return()
 }
 
+makeCatalog <- function(filepath_rcas, random_sigs = TRUE) {
+    #' Create custom signature catalog from RCAS results
+    #' 
+    #' Script pulls RCAS results generated from analyzeHTTrANOVA() and
+    #' compiles genes into signatures for use in concentration-response
+    #' profiling.
+    #' 
+    #' @param filepath_rcas character | path to file containing RCAS results
+    #'  as output by analyzeHTTrANOVA()
+    #' @return saved xlsx file containing custom signature catalog. File is
+    #'  stored in the created input/signatures directory
+    #' @example filepath <- "~/HTTr_ANOVA_composite.RData"
+    #'  makeCatalog(filepath)
+    #' @export
+    
+}
+
 importDESeq2 <- function(db_host, db_name) {
     #' Load gene fold-changes from MongoDB
     #' 

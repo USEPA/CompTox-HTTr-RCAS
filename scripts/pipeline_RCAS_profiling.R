@@ -1,5 +1,7 @@
 # NAM-integration-pilot workflow 3
 # Concentration-Response Profiling of Reference Chemical-Associated Signatures
+library(dplyr)
+library(tidyr)
 
 profileRCAS <- function(
     db_host, db_name, directory_name = "./data/", cytotox = FALSE
@@ -83,15 +85,83 @@ makeDirectory <- function(directory_name) {
     return()
 }
 
-makeCatalog <- function(filepath_rcas, random_sigs = TRUE) {
+selectRCASGenes <- function(filepath_rcas, prop_class = 0.7, min_variables = 10) {
+    #' Perform gene selection for final RCAS determination
+    #' 
+    #' Gene selection is performed for each reference class to
+    #' identify genes that have a significantly lower potency
+    #' than a proportion of other reference classes, forming a
+    #' final signature.
+    #' 
+    #' @param filepath_rcas character | path to RData file containing RCAS
+    #'  results as output by analyzeHTTrANOVA()
+    #' @param prop_class numeric | proportion of classes that a class
+    #'  must have a significantly lower mean BMD than for each gene tested.
+    #'  Number must be between 0-1.
+    #' @param min_variables numeric | minimum number of unique genes needed to
+    #'  constitute a final RCAS
+    #' @return list | RCAS list object with additional data.frame named
+    #'  "composite", in which final RCAS genes are listed for each class
+    #' @example
+    #' @export
+    # check for file compatibility
+    if (!file.exists(filepath_rcas)) {
+        stop("Error: Problem with `filepath_rcas`. \n `filepath_rcas` not found")
+    } else if (tools::file_ext(filepath_rcas) != "RData") {
+        stop("Error: `filepath_rcas` must be an RData file")
+    }
+    # import + harmonize object name
+    load(filepath_rcas)
+    rcas <- get(ls()[!ls() %in% c("filepath_rcas", "random_sigs")])
+
+    # determine number of pairwise comparisons for which a gene
+    # is more potent for a reference class, calculate propotion of
+    # significant/total comparisons, and keep genes with >70%
+    # significant pairwise comparisons
+    composite <- rcas$posthoc.estimate$posthoc.sig %>%
+        mutate(n_classes = length(unique(rcas$httr.wide$ref_class))) %>%
+        group_by(class_1, variable) %>%
+        mutate(n_sig = n(), prop_sig = n_sig / (n_classes - 1)) %>%
+        filter(prop_sig > prop_class & variable != "global") %>%
+        summarise(
+            across(
+                diff,
+                list(mean = mean, med = median, sd = sd),
+                .names = "{.col}_{.fn}"
+            ),
+            n_sig = first(n_sig),
+            prop_sig = first(prop_sig),
+            mean_bmd_diff = first(diff_mean),
+            mean_bmd_log = first(mean_1),
+            # mean_global = first(global_1),
+            .groups = "drop"
+        )
+    # filter for genes unique to 1 class +
+    # classes with minumum number of unqiue genes
+    composite_unique <- composite %>%
+        filter(mean_bmd_log <= 1.5) %>%
+        group_by(variable) %>%
+        mutate(class_count = n()) %>%
+        filter(class_count == 1) %>%
+        group_by(class_1) %>%
+        mutate(variable_count = n()) %>%
+        ungroup() %>%
+        filter(variable_count > min_variables)
+    
+    # add composite to rcas object
+    rcas$composite <- composite_unique
+    return(rcas)
+}
+
+makeCatalog <- function(rcas, random_sigs = TRUE) {
     #' Create custom signature catalog from RCAS results
     #' 
     #' Script pulls RCAS results generated from analyzeHTTrANOVA() and
     #' compiles genes into signatures for use in concentration-response
     #' profiling.
     #' 
-    #' @param filepath_rcas character | path to file containing RCAS results
-    #'  as output by analyzeHTTrANOVA()
+    #' @param rcas list | RCAS list object with selected gene lists
+    #'  as output by selectRCASGenes()
     #' @return saved xlsx file containing custom signature catalog. File is
     #'  stored in the created input/signatures directory
     #' @example filepath <- "~/HTTr_ANOVA_composite.RData"

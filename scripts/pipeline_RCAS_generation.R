@@ -93,12 +93,22 @@ analyzeHTTrANOVA <- function(
     posthoc.p.coff = coff.posthoc.p
   )
 
+  bmd <- filter(
+    httr,
+    gene %in% posthoc.return$posthoc.vars &
+    dtxsid %in% httr.wide$dtxsid
+  ) %>%
+    mutate(
+      ref_class = httr.wide$ref_class[match(dtxsid, httr.wide$dtxsid)]
+    )
+
   # return object list
   return(list(
     ref = ref,
     httr.wide = httr.wide,
     aov.estimate = aov.return,
-    posthoc.estimate = posthoc.return
+    posthoc.estimate = posthoc.return,
+    bmd = bmd
   ))
 }
 

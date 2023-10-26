@@ -2,6 +2,7 @@
 # Concentration-Response Profiling of Reference Chemical-Associated Signatures
 library(dplyr)
 library(tidyr)
+library(openxlsx)
 
 profileRCAS <- function(
     db_host, db_name, directory_name = "./data/", cytotox = FALSE
@@ -146,28 +147,175 @@ selectRCASGenes <- function(filepath_rcas, prop_class = 0.7, min_variables = 10)
         group_by(class_1) %>%
         mutate(variable_count = n()) %>%
         ungroup() %>%
-        filter(variable_count > min_variables)
+        filter(variable_count >= min_variables)
     
     # add composite to rcas object
     rcas$composite <- composite_unique
     return(rcas)
 }
 
-makeCatalog <- function(rcas, random_sigs = TRUE) {
+assignGeneDirection <- function(rcas) {
+    # filter httr$bmd for genes in each reference class +
+    # assign direction based on sign of top +
+    # choose winning direction based on count (and mean_top if tied)
+    sigdir <- rcas$bmd %>%
+        mutate(
+            gene_class = rcas$composite$class_1[
+                match(gene, rcas$composite$variable)
+            ]
+        ) %>%
+        filter(gene_class == ref_class) %>%
+        mutate(
+            direction = case_when(
+                sign(top) == 1 ~ "up",
+                sign(top) == -1 ~ "dn",
+                TRUE ~ "nondirectional"
+            )
+        ) %>%
+        group_by(ref_class, gene, direction) %>%
+        summarise(count = n(), mean_top = mean(top), .groups = "drop_last") %>%
+        mutate(
+            keep = case_when(
+                count == max(count) ~ TRUE,
+                TRUE ~ FALSE
+            )
+        ) %>%
+        filter(keep)
+
+    # annotate composite df with directions +
+    # add to rcas object
+    composite_dir <- left_join(
+        rcas$composite, sigdir,
+        by = c("class_1" = "ref_class", "variable" = "gene")
+    )
+    rcas$composite <- composite_dir
+    return(rcas)
+}
+
+generateRandomSignatures <- function(rcas, nsigs = 100) {
+    gene_lengths <- pull(count(rcas$composite, class_1), n)
+    gene_list <- pull(rcas$composite, variable)
+
+    # randomize signature lengths
+    sig_lengths <- sample(
+        seq(min(gene_lengths), max(gene_lengths), 1), nsigs, replace = TRUE
+    )
+    # randomly draw genes for each signature length + store as list
+    sigs_all <- list()
+    for (idx in seq_len(length(sig_lengths))) {
+        sig <- sample(gene_list, sig_lengths[idx], replace = FALSE)
+        sigs_all[[paste0("Random_", idx)]] <- sig
+    }
+    return(sigs_all)
+}
+
+makeCatalog <- function(directory_name, rcas, catalog_name = "signatureDB_master_catalog.xlsx", random_sigs = NULL) {
     #' Create custom signature catalog from RCAS results
     #' 
     #' Script pulls RCAS results generated from analyzeHTTrANOVA() and
     #' compiles genes into signatures for use in concentration-response
     #' profiling.
     #' 
+    #' @param directory_name character | name of top-level directory
+    #'  for saving RCAS profiling results. Must be same as that for 
+    #'  makeDirectory().
     #' @param rcas list | RCAS list object with selected gene lists
-    #'  as output by selectRCASGenes()
+    #'  and assigned directionality as output by assignGeneDirection()
+    #' @param catalog_name character | name of saved xlsx file containing
+    #'  signature catalog. Must end with ".xlsx".
+    #' @param random_sigs (optional) list | named vectors of random
+    #'  genes as output by generateRandomSignatures()
     #' @return saved xlsx file containing custom signature catalog. File is
     #'  stored in the created input/signatures directory
     #' @example filepath <- "~/HTTr_ANOVA_composite.RData"
     #'  makeCatalog(filepath)
     #' @export
-    
+    # check if directory exists, and add "/" to end if not added
+    if (!dir.exists(directory_name)) stop(gettextf("%s does not exist"))
+    if (!grepl("/$", directory_name)) {
+        directory_name <- paste0(directory_name, "/")
+    }
+    dir_catalog <- paste0(directory_name, "input/signatures/")
+    # convert rcas to catalog form
+    sigcatalog <- rcas$composite %>%
+        unite("signature", c(class_1, direction), sep = "_", remove = FALSE) %>%
+        group_by(signature) %>%
+        summarise(
+            ngene = n(),
+            gene.list = paste(variable, collapse = "|"),
+            parent = paste0(first(class_1)),
+            source = "RCAS",
+            subsource = "-",
+            type = "directional",
+            direction = first(direction),
+            description = paste0(
+                "RCAS for ", first(class_1), ": ", first(direction)
+            ),
+            target_class = "molecular target",
+            super_target = gsub("_.*", "", target_class),
+            .groups = "drop"
+        )
+    # if given random_sigs, expand lists to catalog form
+    if (!is.null(random_sigs)) {
+        randomcat <- data.frame(
+            signature = names(random_sigs),
+            ngene = sapply(random_sigs, length),
+            gene.list = sapply(random_sigs, function(x) paste(x, collapse = "|")),
+            parent = names(random_sigs),
+            source = "Random",
+            subsource = "-",
+            type = "nondirectional",
+            direction = "nondirectional",
+            description = paste0("Signature for randomization test: ", names(random.heparg)),
+            target_class = "Random",
+            super_target = "Random"
+        )
+        sigcatalog <- rbind(sigcatalog, randomcat)
+    }
+    # remove signatures with <10 genes +
+    # rename non-paired directional signatures to nondirectional
+    sigcatalog <- sigcatalog %>%
+        group_by(parent) %>%
+        mutate(
+            type = case_when(
+                any(ngene < 10) ~ "nondirectional",
+                TRUE ~ type
+            ),
+            direction = case_when(
+                any(ngene < 10) ~ "nondirectional",
+                TRUE ~ direction
+            )
+        ) %>%
+        ungroup() %>%
+        filter(ngene >= 10)
+
+    # export catalog:
+    ## signatureDB.RData: subset from signature catalog
+    sigdb <- sigcatalog %>%
+        select(
+            signature, parent, source, subsource, type,
+            direction, ngene, description, gene.list
+        )
+    save(sigdb, file = paste0(dir_catalog, "signatureDB.RData"))
+
+    ## signatureDB_genelists.RData: subset from signature catalog as list
+    genelist.df <- sigcatalog %>%
+        select(signature, gene.list)
+    genelists <- as.list(genelist.df$gene.list)
+    names(genelists) <- genelist.df$signature
+    genelists <- lapply(genelists, function(x) {unlist(strsplit(x, "\\|"))})
+
+    save(genelists, file = paste0(dir_catalog, "signatureDB_genelists.RData"))
+
+    ## {catalog_name}.xlsx: subset from signature catalog
+    sigcatalog <- sigcatalog %>%
+        select(
+            signature, parent, source, subsource, type,
+            direction, ngene, description, super_target,
+            target_class
+        )
+    write.xlsx(sigcatalog, paste0(dir_catalog, catalog_name))
+    return()
 }
 
 importDESeq2 <- function(db_host, db_name) {

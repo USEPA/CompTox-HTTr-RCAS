@@ -3,6 +3,9 @@
 library(dplyr)
 library(tidyr)
 library(openxlsx)
+# library(httrlib)
+library(httrpathway)
+# source("../httrpathway/httrpl/Rlib/httrpl.R", chdir = TRUE)
 
 profileRCAS <- function(
     db_host, db_name, directory_name = "./data/", cytotox = FALSE
@@ -318,15 +321,116 @@ makeCatalog <- function(directory_name, rcas, catalog_name = "signatureDB_master
     return()
 }
 
-importDESeq2 <- function(db_host, db_name) {
+importDESeq2 <- function(directory_name, db_host, db_name, fc1_name) {
     #' Load gene fold-changes from MongoDB
     #' 
     #' Script pulls DESeq2-moderated fold changes from MongoDB for the specified
     #' study. Gene names are matched to each probe, and column names are
     #' formatted as expected by httrpathway::buildFCMAT1.fromDB.
+    #' 
+    #' @param directory_name character | name of top-level directory
+    #'  for saving RCAS profiling results. Must be same as that for
+    #'  makeDirectory().
+    #' @param db_host character | alias of host MongoDB server
+    #' @param db_name character | name of study to pull data from. See
+    #'  httr-db Wiki for options, all study names and credentials must
+    #'  be stored in a .mongopw file on home directory for access.
+    #' @param fc1_name character | name of saved RData file containing
+    #'  fold-change matrix. Must end with ".RData".
+    #' @return saved RData file containing gene fold-change values for
+    #'  all chemicals in selected study. File is stored in the created
+    #'  input/fcdata directory.
+    #' @example
+    #'  directory_name <- "./data/"
+    #'  db_host <- "ccte-mongodb-res.epa.gov"
+    #'  db_name <- "res_httr_u2os_toxcast"      # Must have this study and credentials in .mongopw
+    #'  file_fc1 <- "httr_u2os_fc1.RData"
+    #'  importDESeq2(directory_name, db_host, db_name, file_fc1)
+    #' @export
+    # get chem_ids for full study
+    db.con <- httrlib::openMongo(
+        host = db_host, db = db_name, collection = "httr_chem"
+    )
+    httr.chem <- db.con$find()
+
+    # get probe_ids matching any rcas gene symbol
+    load(paste0(directory_name, "input/signatures/signatureDB_genelists.RData"))
+    genes_all <- unname(unlist(genelists))
+    probes <- httrlib::getProbeManifest(db_host = db_host, db_name = db_name)
+    probes_rcas <- probes[probes$gene_symbol %in% genes_all, ]
+    
+    # retrieve DESeq2 results
+    FCMAT1 <- httrlib::getDEGs(
+        db_host = db_host,
+        db_name = db_name,
+        flatten = TRUE,
+        chem_id = httr.chem$chem_id[1],
+        # probe_id = probes_rcas$probe_name[1],
+        anl_name = "meanncnt0_5-plateteffect_1-shrinkage_normal"
+    )
+    # add missing columns via chemical manifest
+    FCMAT1$dtxsid <- httr.chem$dtxsid[match(FCMAT1$chem_id, httr.chem$chem_id)]
+    FCMAT1$chem_name <- httr.chem$chem_name[
+        match(FCMAT1$chem_id, httr.chem$chem_id)
+    ]
+
+    # add gene-level annotations via probe manifest
+    FCMAT1$gene_symbol <- probes$gene_symbol[
+        match(FCMAT1$probe_id, probes$probe_name)
+    ]
+
+    # rename other columns to match expected FCMAT2 names
+    colnames.old <- c("trt_grp_id", "log2FoldChange", "lfcSE")
+    colnames.new <- c("sample_key", "l2fc", "se")
+    colnames(FCMAT1)[which(colnames(FCMAT1) %in% colnames.old)] <- colnames.new
+
+    # save to expected dir for DESeq2 output
+    save(FCMAT1, file = paste0(
+        directory_name, "input/fcdata/new_versions/", fc1_name
+    ))
+    return()
 }
 
-loadCytotox <- function(db_host, db_name) {
+makeFCMAT2 <- function(directory_name, db_name, fc1_name) {
+    #' Reshape DESeq2-moderated fold-changes for signature profiling
+    #' 
+    #' Script processes DESeq2-moderated fold changes from MongoDB to
+    #'  a form usable by httrpathway::driver(). Serves as a wrapper
+    #'  for httrpathway::buildFCMAT1.fromDB() and
+    #'  httrpathway::buildFCMAT2.fromDB().
+    #' 
+    #' @param directory_name character | name of top-level directory
+    #'  for saving RCAS profiling results. Must be same as that for
+    #'  makeDirectory().
+    #' @param db_name character | name of study to pull data from. See
+    #'  httr-db Wiki for options, all study names and credentials must
+    #'  be stored in a .mongopw file on home directory for access.
+    #' @param fc1_name character | name of saved RData file containing
+    #'  fold-change matrix as output by importDESeq2(). Must end with
+    #'  ".RData".
+    #' @return saved RData files containing gene fold-change values for
+    #'  all chemicals in selected study. Files are stored in the created
+    #'  input/fcdata directory.
+    #' @example
+    #'  directory_name <- "./data/"
+    #'  file_fc1 <- "httr_u2os_fc1.RData"
+    #'  makeFCMAT2(directory_name, db_host, db_name, file_fc1)
+    #' @export
+    # CHEM_DICT + FCMAT1 objects
+    buildFCMAT1.fromDB(
+        dataset = db_name,
+        dir = paste0(directory_name, "input/fcdata/new_versions/"),
+        infile = fc1_name
+    )
+    # FCMAT2 + PV + SE + FCoverSE + CHEM_DICT objects
+    buildFCMAT2.fromDB(
+        dataset = db_name,
+        dir = paste0(directory_name, "input/fcdata/"),
+        method = "gene"
+    )
+}
+
+importCytotox <- function(db_host, db_name) {
     #' Load chemical cytotoxicity data from MongoDB
     #' 
     #' Script pulls HTPP-derived cytotoxicity flags from MongoDB for the

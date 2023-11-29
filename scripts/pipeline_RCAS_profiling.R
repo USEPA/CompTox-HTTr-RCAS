@@ -7,44 +7,34 @@ library(openxlsx)
 library(httrpathway)
 # source("../httrpathway/httrpl/Rlib/httrpl.R", chdir = TRUE)
 
-profileRCAS <- function(
-    db_host, db_name, directory_name = "./data/", cytotox = FALSE
-) {
+profileRCAS <- function(db_host, db_name, cytotox = FALSE) {
     #' Runtime function for RCAS concentration-response profiling
     #' 
     #' @param db_host character | URL of server hosting mongo database
     #' @param db_name character | valid name of study to pull data from
-    #' @param directory_name character | name of top-level directory to 
-    #'  construct sub-directories into. defaults to /data subdirectory
     #' @param cytotox logical | flag specifying whether to load chemical
     #'  cytotoxicity estimates for the specified study
-    #' @return saved intermediate/output files: FCMAT1 [probe-level 
+    #' @return saved intermediate/output files: FCMAT1 [probe-level
     #'  log2(fold-change) values], FCMAT2 [gene-level log2(fold-change) values],
-    #'  SIGNATURE_CR [signature-level concentration-response curve fits], and 
+    #'  SIGNATURE_CR [signature-level concentration-response curve fits], and
     #'  associated plots
     #' @example
     #' @export
     # check for directory structure and make directory if needed
-    makeDirectory(directory_name)
+    makeDirectory()
 }
 
-makeDirectory <- function(directory_name) {
+makeDirectory <- function() {
     #' Create directory structure for RCAS profiling
     #' 
     #' Script creates series of directories as expected by httrpathway for
     #' loading input data and saving output data. See documentation of
     #' httrpathway package for further details.
     #' 
-    #' @param directory_name character | name of top-level directory to 
-    #'  construct sub-directories into
     #' @return directory tree for input/output data
     #' @example makeDirectory("./data/")
     #' @export
-    # check if directory exists, and add "/" to end if not added
-    if (!dir.exists(directory_name)) stop(gettextf("%s does not exist"))
-    if (!grepl("/$", directory_name)) {
-        directory_name <- paste0(directory_name, "/")
-    }
+    directory_name <- "../"
     # check for input directories, and create if empty:
     # input/
     # input/fcdata
@@ -107,6 +97,8 @@ selectRCASGenes <- function(filepath_rcas, prop_class = 0.7, min_variables = 10)
     #' @return list | RCAS list object with additional data.frame named
     #'  "composite", in which final RCAS genes are listed for each class
     #' @example
+    #'  filepath_rcas <- "../PFAS-immunotox/data/HTTr_ANOVA_u2os_gene.RData"
+    #'  rcas <- selectRCASGenes(filepath_rcas)
     #' @export
     # check for file compatibility
     if (!file.exists(filepath_rcas)) {
@@ -212,16 +204,13 @@ generateRandomSignatures <- function(rcas, nsigs = 100) {
     return(sigs_all)
 }
 
-makeCatalog <- function(directory_name, rcas, catalog_name = "signatureDB_master_catalog.xlsx", random_sigs = NULL) {
+makeCatalog <- function(rcas, catalog_name = "signatureDB_master_catalog.xlsx", random_sigs = NULL) {
     #' Create custom signature catalog from RCAS results
     #' 
     #' Script pulls RCAS results generated from analyzeHTTrANOVA() and
     #' compiles genes into signatures for use in concentration-response
     #' profiling.
     #' 
-    #' @param directory_name character | name of top-level directory
-    #'  for saving RCAS profiling results. Must be same as that for 
-    #'  makeDirectory().
     #' @param rcas list | RCAS list object with selected gene lists
     #'  and assigned directionality as output by assignGeneDirection()
     #' @param catalog_name character | name of saved xlsx file containing
@@ -234,10 +223,7 @@ makeCatalog <- function(directory_name, rcas, catalog_name = "signatureDB_master
     #'  makeCatalog(filepath)
     #' @export
     # check if directory exists, and add "/" to end if not added
-    if (!dir.exists(directory_name)) stop(gettextf("%s does not exist"))
-    if (!grepl("/$", directory_name)) {
-        directory_name <- paste0(directory_name, "/")
-    }
+    directory_name <- "../"
     dir_catalog <- paste0(directory_name, "input/signatures/")
     # convert rcas to catalog form
     sigcatalog <- rcas$composite %>%
@@ -321,16 +307,13 @@ makeCatalog <- function(directory_name, rcas, catalog_name = "signatureDB_master
     return()
 }
 
-importDESeq2 <- function(directory_name, db_host, db_name, fc1_name) {
+importDESeq2 <- function(db_host, db_name, fc1_name) {
     #' Load gene fold-changes from MongoDB
     #' 
     #' Script pulls DESeq2-moderated fold changes from MongoDB for the specified
     #' study. Gene names are matched to each probe, and column names are
     #' formatted as expected by httrpathway::buildFCMAT1.fromDB.
     #' 
-    #' @param directory_name character | name of top-level directory
-    #'  for saving RCAS profiling results. Must be same as that for
-    #'  makeDirectory().
     #' @param db_host character | alias of host MongoDB server
     #' @param db_name character | name of study to pull data from. See
     #'  httr-db Wiki for options, all study names and credentials must
@@ -341,13 +324,13 @@ importDESeq2 <- function(directory_name, db_host, db_name, fc1_name) {
     #'  all chemicals in selected study. File is stored in the created
     #'  input/fcdata directory.
     #' @example
-    #'  directory_name <- "./data/"
     #'  db_host <- "ccte-mongodb-res.epa.gov"
     #'  db_name <- "res_httr_u2os_toxcast"      # Must have this study and credentials in .mongopw
     #'  file_fc1 <- "httr_u2os_fc1.RData"
-    #'  importDESeq2(directory_name, db_host, db_name, file_fc1)
+    #'  importDESeq2(db_host, db_name, file_fc1)
     #' @export
     # get chem_ids for full study
+    directory_name <- "../"
     db.con <- httrlib::openMongo(
         host = db_host, db = db_name, collection = "httr_chem"
     )
@@ -391,7 +374,7 @@ importDESeq2 <- function(directory_name, db_host, db_name, fc1_name) {
     return()
 }
 
-makeFCMAT2 <- function(directory_name, db_name, fc1_name) {
+makeFCMAT2 <- function(db_name, fc1_name) {
     #' Reshape DESeq2-moderated fold-changes for signature profiling
     #' 
     #' Script processes DESeq2-moderated fold changes from MongoDB to
@@ -399,9 +382,6 @@ makeFCMAT2 <- function(directory_name, db_name, fc1_name) {
     #'  for httrpathway::buildFCMAT1.fromDB() and
     #'  httrpathway::buildFCMAT2.fromDB().
     #' 
-    #' @param directory_name character | name of top-level directory
-    #'  for saving RCAS profiling results. Must be same as that for
-    #'  makeDirectory().
     #' @param db_name character | name of study to pull data from. See
     #'  httr-db Wiki for options, all study names and credentials must
     #'  be stored in a .mongopw file on home directory for access.
@@ -417,6 +397,7 @@ makeFCMAT2 <- function(directory_name, db_name, fc1_name) {
     #'  makeFCMAT2(directory_name, db_host, db_name, file_fc1)
     #' @export
     # CHEM_DICT + FCMAT1 objects
+    directory_name <- "../"
     buildFCMAT1.fromDB(
         dataset = db_name,
         dir = paste0(directory_name, "input/fcdata/new_versions/"),

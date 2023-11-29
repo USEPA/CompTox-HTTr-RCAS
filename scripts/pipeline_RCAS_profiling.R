@@ -97,7 +97,7 @@ selectRCASGenes <- function(filepath_rcas, prop_class = 0.7, min_variables = 10)
     #' @return list | RCAS list object with additional data.frame named
     #'  "composite", in which final RCAS genes are listed for each class
     #' @example
-    #'  filepath_rcas <- "../PFAS-immunotox/data/HTTr_ANOVA_u2os_gene.RData"
+    #'  filepath_rcas <- "data/examples/rcas_u2os_gene.RData"
     #'  rcas <- selectRCASGenes(filepath_rcas)
     #' @export
     # check for file compatibility

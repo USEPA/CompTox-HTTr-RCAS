@@ -1,3 +1,4 @@
 .vscode/*
 data/input/*
 data/output/*
+data/examples/invitrodb_*

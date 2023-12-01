@@ -4,24 +4,72 @@ library(dplyr)
 library(tidyr)
 library(openxlsx)
 # library(httrlib)
+library(reshape2)
 library(httrpathway)
+library(stringi)
+library(tcplfit2)
+library(stringr)
 # source("../httrpathway/httrpl/Rlib/httrpl.R", chdir = TRUE)
 
-profileRCAS <- function(db_host, db_name, cytotox = FALSE) {
+profileRCAS <- function(
+    filepath_rcas,
+    db_host,
+    db_name,
+    fc1_name,
+    random_sigs = FALSE,
+    catalog_name = "signatureDB_master_catalog.xlsx",
+    cytotox = FALSE
+) {
     #' Runtime function for RCAS concentration-response profiling
     #' 
+    #' @param filepath_rcas character | path to RData file containing RCAS
+    #'  results as output by analyzeHTTrANOVA()
     #' @param db_host character | URL of server hosting mongo database
     #' @param db_name character | valid name of study to pull data from
+    #' @param fc1_name character | name of RData file to be saved with
+    #'  fold-change matrix as output by importDESeq2(). Must end with
+    #'  ".RData".
+    #' @param random_sigs logical | flag specifying whether random signatures
+    #'  should be generated and profiled
+    #' @param catalog_name character | name of xlsx file to be saved with
+    #'  signature catalog. Must end with ".xlsx".
     #' @param cytotox logical | flag specifying whether to load chemical
     #'  cytotoxicity estimates for the specified study
     #' @return saved intermediate/output files: FCMAT1 [probe-level
     #'  log2(fold-change) values], FCMAT2 [gene-level log2(fold-change) values],
     #'  SIGNATURE_CR [signature-level concentration-response curve fits], and
-    #'  associated plots
+    #'  individual concentration-response plots
     #' @example
     #' @export
     # check for directory structure and make directory if needed
     makeDirectory()
+    # perform gene selection from RCAS
+    rcas <- selectRCASGenes(filepath_rcas)
+    # assign directioinality to RCAS genes
+    rcas <- assignGeneDirection(rcas)
+    # generate random signatures if specified +
+    # generate signature catalog
+    if (random_sigs) {
+        sigs_random <- generateRandomSignatures(rcas)
+        makeCatalog(rcas, catalog_name, random_sigs = sigs_random)
+    } else {
+        makeCatalog(rcas, catalog_name)
+    }
+    # import DESeq2-moderated fold-change data from internal mongodb
+    importDESeq2(db_host, db_name, fc1_name)
+    # reshape fold-change data into form useable by httrpathway
+    makeFCMAT2(db_name, fc1_name)
+    # run single-sample GSEA + concentration-response profiling
+    driver(
+        dataset = db_name,
+        sigcatalog = gsub("\\.xlsx", "", catalog_name),
+        sigset = "rcas",
+        method = "gsea",
+        hccut = 0.9,
+        do.scr.plots = FALSE,
+        do.supertarget.boxplot = FALSE,
+        mc.cores = 1
+    )
 }
 
 makeDirectory <- function() {
@@ -108,7 +156,7 @@ selectRCASGenes <- function(filepath_rcas, prop_class = 0.7, min_variables = 10)
     }
     # import + harmonize object name
     load(filepath_rcas)
-    rcas <- get(ls()[!ls() %in% c("filepath_rcas", "random_sigs")])
+    rcas <- get(ls()[!ls() %in% c("filepath_rcas", "prop_class", "min_variables")])
 
     # determine number of pairwise comparisons for which a gene
     # is more potent for a reference class, calculate propotion of
@@ -219,8 +267,8 @@ makeCatalog <- function(rcas, catalog_name = "signatureDB_master_catalog.xlsx", 
     #'  genes as output by generateRandomSignatures()
     #' @return saved xlsx file containing custom signature catalog. File is
     #'  stored in the created input/signatures directory
-    #' @example filepath <- "~/HTTr_ANOVA_composite.RData"
-    #'  makeCatalog(filepath)
+    #' @example catalog_name <- "signatureDB_master_catalog_example.xlsx"
+    #'  makeCatalog(rcas, catalog_name)
     #' @export
     # check if directory exists, and add "/" to end if not added
     directory_name <- "../"
@@ -242,6 +290,7 @@ makeCatalog <- function(rcas, catalog_name = "signatureDB_master_catalog.xlsx", 
             ),
             target_class = "molecular target",
             super_target = gsub("_.*", "", target_class),
+            rcas = 1,
             .groups = "drop"
         )
     # if given random_sigs, expand lists to catalog form
@@ -301,7 +350,7 @@ makeCatalog <- function(rcas, catalog_name = "signatureDB_master_catalog.xlsx", 
         select(
             signature, parent, source, subsource, type,
             direction, ngene, description, super_target,
-            target_class
+            target_class, rcas
         )
     write.xlsx(sigcatalog, paste0(dir_catalog, catalog_name))
     return()
@@ -347,7 +396,8 @@ importDESeq2 <- function(db_host, db_name, fc1_name) {
         db_host = db_host,
         db_name = db_name,
         flatten = TRUE,
-        chem_id = httr.chem$chem_id[1],
+        chem_id = httr.chem$chem_id,
+        # chem_id = httr.chem$chem_id[1],
         # probe_id = probes_rcas$probe_name[1],
         anl_name = "meanncnt0_5-plateteffect_1-shrinkage_normal"
     )
@@ -392,9 +442,8 @@ makeFCMAT2 <- function(db_name, fc1_name) {
     #'  all chemicals in selected study. Files are stored in the created
     #'  input/fcdata directory.
     #' @example
-    #'  directory_name <- "./data/"
     #'  file_fc1 <- "httr_u2os_fc1.RData"
-    #'  makeFCMAT2(directory_name, db_host, db_name, file_fc1)
+    #'  makeFCMAT2(db_name, file_fc1)
     #' @export
     # CHEM_DICT + FCMAT1 objects
     directory_name <- "../"
@@ -419,4 +468,23 @@ importCytotox <- function(db_host, db_name) {
     #' instances with at least one "CELL_VIABILITY" flag across the
     #' concentration series, and the lowest concentration containing the flag
     #' is exported.
+    #' @param db_host
+    #' @param db_name
+    #' @return
+    #' @example
+    #' @export
+    # get QC table from mongodb
+    qc <- getWellInfo(db_host = db_host, db_name = db_name)
+    # get httr_chem table from mongodb
+    db.con <- openMongo(host = db_host, db = db_name, collection = "httr_chem")
+    httr.chem <- db.con$find()
+    # annotate qc dfs with httr_chem columns
+    qc <- left_join(qc, httr.chem, by = "chem_id")
+    # filter dfs for viability flag + determine minimum cytotoxic doses for chemicals
+    cytotox <- qc %>%
+        filter(qc_flag == "CELL_VIABILITY") %>%
+        arrange(conc) %>%
+        distinct(chem_id, .keep_all = TRUE)
+    save(cytotox, file = paste0("../output/HTTr_cytotox_", db_name, ".RData"))
+    return()
 }

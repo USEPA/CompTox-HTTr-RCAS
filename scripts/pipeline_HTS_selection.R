@@ -8,9 +8,7 @@ library(data.table)
 source("scripts/pipeline_refchem_assignment.R")
 
 selectHTSEndpoints <- function(
-    cluster_targets = c(
-        "AHR_Positive", "RARA_Positive", "KCNH2_Negative", "NR3C1_Positive"
-    ),
+    cluster_targets,
     filepath_export = "data/examples/invitrodb_v3_4_selected.RData",
     db_host = "ccte-mysql-res.epa.gov",
     db_name = "prod_internal_invitrodb_v3_4",
@@ -94,10 +92,9 @@ selectHTSEndpoints <- function(
         refchem_assign, cluster_target %in% cluster_targets
     )
     mc5_full <- mc5 %>%
-        filter(dsstox_substance_id %in% refchem_targets$dsstox_substance_id) %>%
         mutate(
-            ref_class = refchem_targets$cluster_target[
-                match(dsstox_substance_id, refchem_targets$dsstox_substance_id)
+            ref_class = refchem_assign$cluster_target[
+                match(dsstox_substance_id, refchem_assign$dsstox_substance_id)
             ],
             ac50_uM = case_when(!is.na(modl_ga) ~ 10^modl_ga),
             acc_uM = case_when(!is.na(modl_acc) ~ 10^modl_acc),
@@ -106,17 +103,22 @@ selectHTSEndpoints <- function(
         group_by(aeid) %>%
         mutate(chems_measured = n()) %>%
         ungroup()
+    # mc5_refchems <- filter(
+    #     mc5_full, dsstox_substance_id %in% refchem_targets$dsstox_substance_id
+    # )
     sc2_full <- sc2 %>%
-        filter(dsstox_substance_id %in% refchem_targets$dsstox_substance_id) %>%
         mutate(
-            ref_class = refchem_targets$cluster_target[
-                match(dsstox_substance_id, refchem_targets$dsstox_substance_id)
+            ref_class = refchem_assign$cluster_target[
+                match(dsstox_substance_id, refchem_assign$dsstox_substance_id)
             ],
             gene_symbol = gene$gene_symbol[match(aeid, gene$aeid)]
         ) %>%
         group_by(aeid) %>%
         mutate(chems_measured = n()) %>%
         ungroup()
+    # sc2_refchems <- filter(
+    #     sc2_full, dsstox_substance_id %in% refchem_targets$dsstox_substance_id
+    # )
 
     # find aeids for gene symbols related to refchemdb clusters
     mc5_measured <- data.frame()
@@ -147,11 +149,15 @@ selectHTSEndpoints <- function(
             hitc_any = hitc == 1 | hitc_sc2 == 1,
             in_class = ref_class == assay_target
         )
+    chems_combined_ref <- filter(
+        chems_combined,
+        dsstox_substance_id %in% refchem_targets$dsstox_substance_id
+    )
 
     # evaluate aeid confidence:
     # classification accuracy + potency of active chemicals
-    conf_activity <- evalConfActivity(chems_combined)
-    conf_potency <- evalConfPotency(chems_combined)
+    conf_activity <- evalConfActivity(chems_combined_ref)
+    conf_potency <- evalConfPotency(chems_combined_ref)
 
     # determine aeids that don't pass criteria for bioactivity + potency
     endpoints_remove <- selectEndpoints(conf_activity, conf_potency)
@@ -366,10 +372,10 @@ loadSC2 <- function(
     return(sc2)
 }
 
-filterForTarget <- function(mc5_full, ace, class_name) {
+filterForTarget <- function(mc5_refchems, ace, class_name) {
     #' Match invitrodb endpoints with refchemdb cluster annotations
     #' 
-    #' @param mc5_full tibble | table of invitrodb concentration-response
+    #' @param mc5_refchems tibble | table of invitrodb concentration-response
     #'  estimates, subset for any chemical in refchemdb cluster assignments.
     #' @param ace data.table | table of invitrodb assay annotations as output by
     #'  loadAnnotations().
@@ -436,7 +442,7 @@ filterForTarget <- function(mc5_full, ace, class_name) {
     ## CEETOX: measuring steroidogenesis
     ## ATG_TRANS_dn: noisier/unreliable curve fits across assay mode
     ## NVS_ADME: measuring enzymatic activity
-    mc5_refs <- mc5_full %>%
+    mc5_refs <- mc5_refchems %>%
         filter(
             aeid %in% ace_all$aeid &
             !grepl("CEETOX", aenm) &

@@ -181,7 +181,7 @@ assignChemsToClusters <- function(filtered, clusters, cluster_size = 3) {
         mutate(clusters_n = n()) %>%    # remove remaining ties
         filter(clusters_n == 1)
 
-    # remove clusters with <5 chemicals represented
+    # determine clusters to keep: chemicals >= cluster_size
     chems_assigned_rep <- filtered %>%
         filter(dsstox_substance_id %in% chems_assigned$dsstox_substance_id) %>%
         mutate(
@@ -192,8 +192,33 @@ assignChemsToClusters <- function(filtered, clusters, cluster_size = 3) {
         distinct(dsstox_substance_id, .keep_all = TRUE) %>%
         group_by(cluster) %>%
         summarise(size = n()) %>%
-        mutate(size_total = sum(size)) %>%
-        filter(size_total >= cluster_size)
-    
-    return(chems_assigned_rep)
+        # mutate(size_total = sum(size)) %>%
+        filter(size >= cluster_size)
+
+    # get cluster labels via most frequent target_mode term(s)
+    cluster_labels <- filtered %>%
+        filter(dsstox_substance_id %in% chems_assigned$dsstox_substance_id) %>%
+        mutate(cluster = chems_assigned$cluster[
+            match(dsstox_substance_id, chems_assigned$dsstox_substance_id)
+        ]) %>%
+        filter(cluster %in% chems_assigned_rep$cluster) %>%
+        count(cluster, target_mode) %>%
+        group_by(cluster) %>%
+        slice_max(n) %>%
+        summarise(cluster_target = paste(target_mode, collapse = "|"))
+
+    # get final cluster assignment table: filter for kept clusters + add labels
+    chems_assigned_final <- filtered %>%
+        filter(dsstox_substance_id %in% chems_assigned$dsstox_substance_id) %>%
+        mutate(cluster = chems_assigned$cluster[
+            match(dsstox_substance_id, chems_assigned$dsstox_substance_id)
+        ]) %>%
+        filter(cluster %in% chems_assigned_rep$cluster) %>%
+        distinct(dsstox_substance_id, .keep_all = TRUE) %>%
+        mutate(cluster_target = cluster_labels$cluster_target[
+            match(cluster, cluster_labels$cluster)
+        ]) %>%
+        select(dsstox_substance_id, name, cluster, cluster_target)
+
+    return(chems_assigned_final)
 }

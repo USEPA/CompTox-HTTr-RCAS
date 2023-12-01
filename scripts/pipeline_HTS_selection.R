@@ -8,8 +8,10 @@ library(data.table)
 source("scripts/pipeline_refchem_assignment.R")
 
 selectHTSEndpoints <- function(
-    # filepath_rcas_cr,
-    cluster_targets,
+    cluster_targets = c(
+        "AHR_Positive", "RARA_Positive", "KCNH2_Negative", "NR3C1_Positive"
+    ),
+    filepath_export = "data/examples/invitrodb_v3_4_selected.RData",
     db_host = "ccte-mysql-res.epa.gov",
     db_name = "prod_internal_invitrodb_v3_4",
     usernm = "_dataminer",
@@ -21,12 +23,12 @@ selectHTSEndpoints <- function(
 ) {
     #' Conduct selection of selective endpoints from invitrodb
     #' 
-    #' @param filepath_rcas_cr character | path to concentration-response
-    #'  estimates for RCAS as output by profileRCAS()
     #' @param cluster_targets character | cluster annotations to select
     #'  endpoints in relation to. Must be one or more of the entries in the
     #'  `cluster_target` column of the refchemdb cluster assignments table as
     #'  output by assignRefChems().
+    #' @param filepath_export character | path to save final table of
+    #'  invitrodb bioactivity estimates for selected endpoints
     #' @param db_host character | name of host url
     #' @param db_name character | name of invitrodb instance to query
     #' @param usernm character | username for host url
@@ -43,30 +45,50 @@ selectHTSEndpoints <- function(
     #' @return 
     #' @example
     #' @export
-    # load MC5 table + add flag-based filters + load ace tables
+    # load MC5 table + add flag-based filters
     if (file.exists(filepath_save_mc5)) {
-        message("loading mc5 table from %s", filepath_save_mc5)
+        message(gettextf("loading mc5 table from %s", filepath_save_mc5))
         load(filepath_save_mc5)
     } else {
-        message("%s not found; loading mc5 table from invitrodb")
+        message(gettextf(
+            "%s not found; loading mc5 table from invitrodb", filepath_save_mc5
+        ))
         mc5 <- loadMC5(db_host, db_name, usernm, passwd)
         mc5 <- filterMC5(mc5, filepath_save_mc5)
     }
+    # load ace/gene/cytotox tables
     if (!file.exists(filepath_save_ace)) {
-        message("%s not found; loading ace/gene/cytotox tables from invitrodb")
+        message(gettextf(
+            "%s not found; loading ace/gene/cytotox tables from invitrodb",
+            filepath_save_ace
+        ))
         loadAnnotations(filepath_save_ace, db_host, db_name, usernm, passwd)
     }
     load(filepath_save_ace)
+    # load SC2 table
+    if (file.exists(filepath_save_sc2)) {
+        message(gettextf("loading sc2 table from %s", filepath_save_sc2))
+        load(filepath_save_sc2)
+    } else {
+        message(gettextf(
+            "%s not found; loading sc2 table from invitrodb",
+            filepath_save_sc2
+        ))
+        sc2 <- loadSC2(filepath_save_sc2, db_host, db_name, usernm, passwd)
+    }
 
     # load refchem assignments or generate if null
     if (!is.null(filepath_load_refchem)) {
+        message(gettextf(
+            "loading refchem assignments from %s", filepath_load_refchem
+        ))
         load(filepath_load_refchem)
     } else {
         message("no refchem filepath specified; generating assignments from RefChemDB")
         refchem_assign <- assignRefChems()
     }
 
-    # filter mc5 for refchems associated with any cluster_target +
+    # filter mc5/sc2 for refchems associated with any cluster_target +
     # annotate with aeid gene/refchemdb target
     refchem_targets <- filter(
         refchem_assign, cluster_target %in% cluster_targets
@@ -84,24 +106,62 @@ selectHTSEndpoints <- function(
         group_by(aeid) %>%
         mutate(chems_measured = n()) %>%
         ungroup()
+    sc2_full <- sc2 %>%
+        filter(dsstox_substance_id %in% refchem_targets$dsstox_substance_id) %>%
+        mutate(
+            ref_class = refchem_targets$cluster_target[
+                match(dsstox_substance_id, refchem_targets$dsstox_substance_id)
+            ],
+            gene_symbol = gene$gene_symbol[match(aeid, gene$aeid)]
+        ) %>%
+        group_by(aeid) %>%
+        mutate(chems_measured = n()) %>%
+        ungroup()
 
     # find aeids for gene symbols related to refchemdb clusters
     mc5_measured <- data.frame()
+    sc2_measured <- data.frame()
     for (class_name in cluster_targets) {
         mc5_target <- filterForTarget(mc5_full, ace, class_name)
+        sc2_target <- filterForTarget(sc2_full, ace, class_name)
         mc5_measured <- rbind(
             mc5_measured, mutate(mc5_target, assay_target = class_name)
         )
+        sc2_measured <- rbind(
+            sc2_measured, mutate(sc2_target, assay_target = class_name)
+        )
     }
-    mc5_measured <- mutate(
+    # combine mc5/sc2 tables + determine in-class/out-of-class labels
+    chems_combined <- full_join(
         mc5_measured,
-        hitc = case_when(is.na(hitc) ~ 0L, TRUE ~ as.integer(hitc)),
-        in_class = ref_class == assay_target
-    )
+        sc2_measured,
+        by = c(
+            "chid", "casn", "chnm", "dsstox_substance_id", "ref_class",
+            "aeid", "aenm", "assay_target"
+        ),
+        suffix = c("", "_sc2")
+    ) %>%
+        mutate(
+            hitc = case_when(is.na(hitc) ~ 0L, TRUE ~ as.integer(hitc)),
+            hitc_sc2 = case_when(is.na(hitc_sc2) ~ 0L, TRUE ~ as.integer(hitc_sc2)),
+            hitc_any = hitc == 1 | hitc_sc2 == 1,
+            in_class = ref_class == assay_target
+        )
 
-    # evaluate aeid confidence: classification accuracy
-    conf_activity <- evalConfActivity(mc5_measured)
+    # evaluate aeid confidence:
+    # classification accuracy + potency of active chemicals
+    conf_activity <- evalConfActivity(chems_combined)
+    conf_potency <- evalConfPotency(chems_combined)
 
+    # determine aeids that don't pass criteria for bioactivity + potency
+    endpoints_remove <- selectEndpoints(conf_activity, conf_potency)
+
+    # remove non-passing endpoints from mc5/sc2 data + export to file
+    chems_filtered <- filter(chems_combined, !aenm %in% endpoints_remove)
+    save(chems_filtered, file = filepath_export)
+    message(gettextf("passing endpoint data saved to %s", filepath_export))
+
+    return(chems_filtered)
 }
 
 loadMC5 <- function(
@@ -256,6 +316,56 @@ loadAnnotations <- function(
     return()
 }
 
+loadSC2 <- function(
+    filepath_save = "data/examples/invitrodb_v3_4_sc2.RData",
+    db_host = "ccte-mysql-res.epa.gov",
+    db_name = "prod_internal_invitrodb_v3_4",
+    usernm = "_dataminer",
+    passwd = "pass"
+) {
+    #' Load single-concentration bioactivity estimates from invitrodb
+    #' 
+    #' @param filepath_save character | path to save RData file
+    #' @param db_host character | name of host url
+    #' @param db_name character | name of invitrodb instance to query
+    #' @param usernm character | username for host url
+    #' @param passwd character | password for host url
+    #' @return data.table of bioactivity estimates for all spid-aeid
+    #'  combinations (SC2 table)
+    #' @example
+    #' @export
+    # initialize connection
+    tcplConf(
+        user = usernm,
+        pass = passwd,
+        db = db_name,
+        drvr = "MySQL",
+        host = db_host
+    )
+    con <- dbConnect(
+        drv = RMySQL::MySQL(),
+        user = usernm,
+        password = passwd,
+        host = db_host,
+        database = db_name
+    )
+    # import sc2 data.table
+    sc2 <- tcplPrepOtpt(tcplLoadData(lvl = 2, type = "sc"))
+    # annotate concentrations from sc_agg
+    agg <- tcplPrepOtpt(
+        tcplLoadData(
+            lvl = "agg",
+            type = "sc",
+            fld = "s2id",
+            val = list(unique(sc2$s2id))
+        )
+    )
+    sc2$logc <- agg$logc[match(sc2$s2id, agg$s2id)]
+    # save table
+    save(sc2, file = filepath_save)
+    return(sc2)
+}
+
 filterForTarget <- function(mc5_full, ace, class_name) {
     #' Match invitrodb endpoints with refchemdb cluster annotations
     #' 
@@ -336,24 +446,24 @@ filterForTarget <- function(mc5_full, ace, class_name) {
     return(mc5_refs)
 }
 
-evalConfActivity <- function(mc5_measured) {
+evalConfActivity <- function(chems_combined) {
     #' Evaluate classification accuracy of invitrodb endpoints versus refchemdb
     #' 
-    #' @param mc5_measured tibble | table invitrodb concentration-response
-    #'  estimates, subset for as output by filterForTarget().
-    #' @return tibble of 
+    #' @param chems_combined tibble | table of invitrodb mc5/sc2 measurements as
+    #'  output during selectHTSEndpoints()
+    #' @return tibble summarizing numbers of chemicals with positive/negative
+    #'  endpoint outcomes (`bioactive`) for in-class/ out-of-class annotated
+    #'  chemicals (`in_class`)
     #' @example
     #' @export
-    #' 
-    #' 
-    # annotate with bioactivity classification
-    mc5_measured <- mc5_measured %>%
-        mutate(bioactive = (hitc == 1 & use.me == 1))
+    # annotate with bioactivity classification based on mc/sc criteria
+    chems_combined <- chems_combined %>%
+        mutate(bioactive = (hitc == 1 & use.me == 1) | hitc_sc2 == 1)
 
     # remove duplicate chemical-endpoint pairs (for sc data, keeping highest resp) +
     # count bioactivity classifications for in-class/out-of-class refs
-    refs_summary <- mc5_measured %>%
-        arrange(dsstox_substance_id, aenm, ref_class, hitc) %>%
+    refs_summary <- chems_combined %>%
+        arrange(dsstox_substance_id, aenm, ref_class, desc(max_med_sc2)) %>%
         distinct(dsstox_substance_id, aenm, ref_class, .keep_all = TRUE) %>%
         group_by(aenm, assay_target, in_class, bioactive) %>%
         summarise(count = n(), .groups = "drop") %>%
@@ -365,4 +475,85 @@ evalConfActivity <- function(mc5_measured) {
             )
         )
     return(refs_summary)
+}
+
+evalConfPotency <- function(chems_combined) {
+    #' Evaluate classification accuracy of invitrodb endpoints versus refchemdb
+    #' 
+    #' @param chems_combined tibble | table of invitrodb mc5/sc2 measurements as
+    #'  output during selectHTSEndpoints()
+    #' @return tibble summarizing numbers of chemicals with positive/negative
+    #'  endpoint outcomes (`bioactive`) for in-class/ out-of-class annotated
+    #'  chemicals (`in_class`)
+    #' @example
+    #' @export
+    # annotate with bioactivity classification based on mc/sc criteria
+    chems_combined <- chems_combined %>%
+        mutate(bioactive = (hitc == 1 & use.me == 1) | hitc_sc2 == 1)
+    # determine aeids to test
+    # (3+ positive and negative annotated chemicals bioactive in aeid)
+    aenms_test <- chems_combined %>%
+        arrange(dsstox_substance_id, aenm, ref_class, desc(max_med_sc2)) %>%
+        distinct(dsstox_substance_id, aenm, ref_class, .keep_all = TRUE) %>%
+        filter(bioactive) %>%
+        count(aenm, in_class) %>%
+        group_by(aenm) %>%
+        mutate(
+            n_classes = n(),
+            test = n_classes == 2 & !any(n < 3)
+        ) %>%
+        filter(test)
+
+    # run wilcoxon rank-sum tests for log10(ACC) values for each aeid
+    ranksum <- chems_combined %>%
+        arrange(dsstox_substance_id, aenm, ref_class, desc(max_med_sc2)) %>%
+        distinct(dsstox_substance_id, aenm, ref_class, .keep_all = TRUE) %>%
+        filter(bioactive & aenm %in% unique(aenms_test$aenm)) %>%
+        group_by(aenm) %>%
+        nest() %>%
+        mutate(
+            wilcox = purrr::map(data, function(x) wilcox.test(
+                formula = modl_acc ~ in_class, data = x
+            )),
+            wilcox_df = purrr::map(wilcox, broom::tidy)
+        ) %>%
+        unnest(wilcox_df) %>%
+        mutate(fdr = p.adjust(p.value, method = "fdr"), keep = fdr <= 0.05)
+
+    return(ranksum)
+}
+
+selectEndpoints <- function(conf_activity, conf_potency) {
+    #' Evaluate classification accuracy of invitrodb endpoints versus refchemdb
+    #' 
+    #' @param conf_activity tibble | table of classification summary results as
+    #'  output by evalConfActivity()
+    #' @param conf_potency tibble | table of potency statistical results as
+    #'  output by evalConfPotency()
+    #' @return vector of aenm values to remove
+    #' @example
+    #' @export
+    # determine whether endpoints pass criteria for
+    # bioactivity (count) and potency (ranksum)
+    conf_summary <- conf_activity %>%
+        group_by(aenm, assay_target, in_class) %>%
+        mutate(
+            count_total = sum(count),
+            count_prop = count / count_total,
+            ranksum_keep = conf_potency$keep[match(aenm, conf_potency$aenm)],
+            keep = case_when(
+                !is.na(ranksum_keep) ~ ranksum_keep,
+                is.na(ranksum_keep) & in_class ~ count_prop > 0.5,
+                is.na(ranksum_keep) & !in_class ~ count_prop > 0.75,
+            )
+        ) %>%
+        filter(in_class == bioactive) %>%
+        group_by(aenm, assay_target) %>%
+        mutate(keep_all = all(keep))
+
+    endpoints_remove <- conf_summary %>%
+        filter(!is.na(count_prop) & !keep_all) %>%
+        pull(aenm) %>%
+        unique()
+    return(endpoints_remove)
 }

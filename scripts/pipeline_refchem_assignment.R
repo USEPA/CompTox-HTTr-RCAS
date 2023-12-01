@@ -52,7 +52,7 @@ assignRefChems <- function(
     )
 
     # export chemical assignments to file
-    openxlsx::write.xlsx(refchem_assign, filepath_save)
+    save(refchem_assign, file = filepath_save)
     message(gettextf("Refchem assignments written to %s", filepath_save))
 
     return(refchem_assign)

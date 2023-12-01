@@ -29,7 +29,7 @@ All code was written and tested using R 3.6.0, and should run using later versio
 
 | Use Case | Package(s)
 |---------|---------|
-| General Data <br> Manipulation | tidyr 1.1.4 <br> dplyr 1.0.7 <br> tibble 3.1.6 <br> magrittr 2.0.1 <br> tidyselect 1.1.1 <br> broom 0.7.11 <br> openxlsx 4.2.5 |
+| General Data <br> Manipulation | tidyr 1.1.4 <br> dplyr 1.0.7 <br> tibble 3.1.6 <br> magrittr 2.0.1 <br> tidyselect 1.1.1 <br> broom 0.7.11 <br> openxlsx 4.2.5 <br> reshape2 1.4.4 <br> stringi 1.7.6 <br> stringr 1.4.0 |
 Plotting and <br> Visualization | ggplot2 3.3.5 <br> ggrepel 0.9.1 <br> RColorBrewer 1.1-2 <br> ComplexHeatmap 2.2.0 <br> circlize 0.4.13 |
 Statistical <br> Analyses | foreach 1.5.1 <br> doParallel 1.0.16 <br> philentropy 0.5.0 <br> tcplfit2 0.1.3
 ToxCast Data <br> Download | tcpl 2.0.2 <br> RMySQL 0.10.22 <br> DBI 1.1.2

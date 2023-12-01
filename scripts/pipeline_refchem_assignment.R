@@ -2,6 +2,7 @@
 # Selection of MoA-associated reference chemicals by literature association
 
 assignRefChems <- function(
+    filepath_save = "data/examples/refchemdb_clusters.RData",
     homedir = getwd(),
     filename = "NIHMS1537541-supplement-Supplement1.xlsx",
     sheet = "S12 Data",
@@ -20,11 +21,11 @@ assignRefChems <- function(
     #'  sub-directory)
     #' @param support double | minimum level of support for retaining chemical-
     #'  target annotations
-    #' @param cluster_method string | method for performing hierarchical 
+    #' @param cluster_method string | method for performing hierarchical
     #'  clustering. See hclust() documentation for options.
     #' @param dend_height double | height of dendrogram at which to cut for
     #'  identifying clusters. Must be value between 0 and 1.
-    #' @param cluster_size double | minimum number of chemicals assigned to 
+    #' @param cluster_size double | minimum number of chemicals assigned to
     #'  cluster in order to retain that cluster
     #' @return tibble of reference chemicals and assigned clusters
     #' @example refchems <- assignRefChems()
@@ -49,6 +50,10 @@ assignRefChems <- function(
         refchem_clusters,
         cluster_size
     )
+
+    # export chemical assignments to file
+    openxlsx::write.xlsx(refchem_assign, filepath_save)
+    message(gettextf("Refchem assignments written to %s", filepath_save))
 
     return(refchem_assign)
 }
@@ -136,7 +141,7 @@ clusterTargets <- function(jaccard_obj, method = "average", dend_height = 0.8) {
     jaccard <- jaccard_obj$jaccard
 
     # perform hierarchical clustering on target_mode annotations
-    hc <- hclust(jaccard, method = method)
+    hc <- hclust(as.dist(jaccard), method = method)
 
     # cut dendrogram to specified height + get clusters
     clusters <- hc %>%
@@ -189,6 +194,6 @@ assignChemsToClusters <- function(filtered, clusters, cluster_size = 3) {
         summarise(size = n()) %>%
         mutate(size_total = sum(size)) %>%
         filter(size_total >= cluster_size)
-
-
+    
+    return(chems_assigned_rep)
 }

@@ -119,10 +119,47 @@ runFramework <- function(
     # subset Tier 2 data for endpoints matching each Tier 1 RCAS
     chems_match_rcas <- harmonizeTargetNames(cr_rcas, chems_filtered_rcas)
 
-    # combine Tier 1/2 tables
-    compare <- combineTiers(
-        cr_rcas, cr_burst_rcas, chems_match_rcas, mc5_burst_rcas
+    # combine Tier 1/2 tables (all chemicals x all measured endpoints)
+    compare_tier1 <- combineTier1(cr_rcas, cr_burst_rcas)
+    compare_tier1 <- mutate(
+        compare_tier1,
+        signature_label = gsub("^(.+?)_", "", gsub("_up|_dn", "", signature))
     )
+    compare_tier2 <- combineTier2(chems_match_rcas, mc5_burst_rcas)
+    compare_full <- compare_tier1 %>%
+        select(
+            dtxsid, name, signature, signature_label, bmd_log, bmd_log_med,
+            bmd_log_mode, threshold_1sd, tier1_positive, tier1_selective_1sd
+        ) %>%
+        full_join(
+            ., select(
+                compare_tier2,
+                dsstox_substance_id, chnm, n_toxcast_meas, aeid, aenm, hitc,
+                use.me, modl_acc, specific_crit, modl_acc_mode, tier2_positive,
+                tier2_selective, tier2_conflict, signature
+            ),
+            by = c(
+                "dtxsid" = "dsstox_substance_id",
+                "signature_label" = "signature"
+            )
+        ) %>%
+        rename(tier1_selective = tier1_selective_1sd)
+    # condense table to chemicals x rcas
+    compare_sum <- compare_full %>%
+        group_by(dtxsid, signature) %>%
+        summarise(
+            across(
+                c(
+                    name, chnm, bmd_log, bmd_log_med, bmd_log_mode,
+                    threshold_1sd, tier1_positive, tier1_selective,
+                    n_toxcast_meas
+                ),
+                unique
+            ),
+            across(c(modl_acc, modl_acc_mode), ~ min(.x, na.rm = TRUE)),
+            across(c(tier2_positive, tier2_selective, tier2_conflict), any),
+            .groups = "drop"
+        )
 }
 
 loadRCASprofiles <- function(filename_cr) {
@@ -265,19 +302,15 @@ harmonizeTargetNames <- function(cr_rcas, chems_filtered_rcas) {
     return(chems_match_rcas)
 }
 
-combineTiers <- function(
-    cr_rcas, cr_burst_rcas, chems_match_rcas, mc5_burst_rcas
-) {
-    #' Combine Tier 1/2 data streams into a single table
+combineTier1 <- function(cr_rcas, cr_burst_rcas) {
+    #' Combine Tier 1 RCAS/burst readouts
     #' 
     #' @param cr_rcas
     #' @param cr_burst_rcas
-    #' @param chems_match_rcas
-    #' @param mc5_burst_rcas
     #' @return
     #' @example
     #' @export
-    # combine Tier 1 RCAS/burst measurements + define Tier 1 criteria
+    # combine RCAS/burst measurements + define Tier 1 criteria
     compare <- cr_rcas %>%
         mutate(
             bmd_log = case_when(
@@ -300,4 +333,50 @@ combineTiers <- function(
             tier1_positive = bmd_log < 2.5,
             tier1_selective_1sd = bmd_log < threshold_1sd
         )
+    return(compare)
+}
+
+combineTier2 <- function(chems_match_rcas, mc5_burst_rcas, threshold_specific = 0.33) {
+    #' Combine Tier 2 targeted/burst readouts
+    #' 
+    #' @param chems_match_rcas
+    #' @param mc5_burst_rcas
+    #' @param threshold_specific double | log10-difference between targeted
+    #'  ACC and statistical mode used to denote tier2-selective chemicals
+    #' @return
+    #' @example
+    #' @export
+    # compile number of orthogonal ToxCast endopints measured per dtxsid/target
+    chems_endpts_meas <- chems_match_rcas %>%
+        distinct(dsstox_substance_id, aenm, assay_rcas, .keep_all = TRUE) %>%
+        count(dsstox_substance_id, assay_rcas, name = "n_toxcast_meas")
+    chems_match_rcas <- left_join(
+        chems_match_rcas, chems_endpts_meas,
+        by = c("dsstox_substance_id", "assay_rcas")
+    )
+
+    # combine targeted/burst measurements + define Tier 2 criteria
+    compare_tier2 <- left_join(
+        chems_match_rcas, select(mc5_burst_rcas, -spid),
+        by = c("dsstox_substance_id", "casn", "chnm")
+    ) %>%
+        mutate(
+            tier2_positive = !is.na(use.me) & use.me == 1,
+            tier2_selective = case_when(
+                specific_crit == "median_bioactive" ~ modl_acc <= (modl_acc_mode - threshold_specific),
+                specific_crit == "n<10" ~ modl_acc <= 2.5 - threshold_specific
+            ),
+            tier2_selective = case_when(
+                !is.na(tier2_selective) ~ tier2_selective, TRUE ~ FALSE
+            ),
+            signature = assay_rcas
+            ) %>%
+        group_by(dsstox_substance_id, signature) %>%
+        mutate(
+            tier2_n_specific = sum(tier2_selective),
+            tier2_n_measured = n(),
+            tier2_conflict = any(tier2_selective) & !all(tier2_selective)
+        ) %>%
+        ungroup()
+    return(compare_tier2)
 }

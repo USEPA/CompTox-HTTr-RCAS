@@ -6,6 +6,107 @@ library(openxlsx)
 source("scripts/pipeline_RCAS_profiling.R")
 source("scripts/pipeline_HTS_selection.R")
 
+runFramework <- function(
+    filepath_rcas,
+    filename_cr,
+    filepath_catalog,
+    filepath_mc5_selected,
+    filepath_mc5_burst,
+    filepath_mc5_ace,
+    filepath_export = "data/examples/framework_results.RData"
+) {
+    #' Runtime function for assessing HTTr/ToxCast chemicals in tiered framework
+    #' 
+    #' @param filepath_rcas character | path to file containing RCAS
+    #'  results as output by analyzeHTTrANOVA()
+    #' @param filename_cr character | name of file containing HTTr RCAS
+    #'  concentration-response profiles for chemical screen as output by
+    #'  profileRCAS(). File must be located in
+    #'  "../output/signature_conc_resp_summary/" directory.
+    #' @param filepath_catalog character | name of file containing HTTr
+    #'  concentration-response profiles for HTTr catalog signatures
+    #' @param filepath_mc5_selected character | path to file containing
+    #'  invitrodb concentration-response estimates (mc5 table) for orthogonal
+    #'  endpoints as output by selectHTSEndpoints()
+    #' @param filepath_mc5_burst character | path to file containing
+    #'  non-selective point of departure estimates as output by
+    #'  selectHTSEndpoints()
+    #' @param filepath_mc5_ace character | path to file containing invitrodb
+    #'  endpoint annotations as output by loadAnnotations()
+    #' @param filepath_export character | path to save assessment outcomes
+    #'  for chemical screen
+    #' @return tibble of outcomes for all chemicals screened in HTTr and
+    #'  ToxCast, designated as "tier1-positive", "tier1-selective",
+    #'  "tier2-positive", and "tier2-selective"
+    #' @examples
+    #'  filepath_rcas <- "data/examples/rcas_u2os_gene.RData"
+    #'  filename_cr <- "SIGNATURE_CR_u2os_res_httr_u2os_toxcast_gsea_0.05_conthits.RData"
+    #'  filepath_catalog <- "/ccte/projects1/HTTr/screen_signature_cr/signature_conc_resp/SIGNATURE_CR_screen_large_u2os_toxcast_pfas_pe1_normal_v2_gsea_0.05_conthits.RData"
+    #'  filepath_mc5_selected <- "data/examples/invitrodb_v3_4_selected.RData"
+    #'  filepath_mc5_burst <- "data/examples/invitrodb_v3_4_burst.RData"
+    #'  filepath_mc5_ace <- "data/examples/invitrodb_v3_4_assay_information.RData"
+    #'  results <- runFramework(
+    #'      filepath_rcas,
+    #'      filename_cr,
+    #'      filepath_catalog,
+    #'      filepath_mc5_selected,
+    #'      filepath_mc5_burst,
+    #'      filepath_mc5_ace
+    #'  )
+    #' @export
+    # load Tier 1 data:
+    ## RCAS object
+    message(gettextf("loading RCAS object from %s", filepath_rcas))
+    rcas <- selectRCASGenes(filepath_rcas)
+    ## RCAS profiling data + remove random signatures
+    message(gettextf("loading RCAS cr estimates from %s", filename_cr))
+    cr_rcas <- loadRCASprofiles(filename_cr)
+    cr_rcas <- filter(cr_rcas, !grepl("Random", signature))
+    ## Catalog profiling data
+    message(gettextf(
+        "loading HTTr catalog cr estimates from %s", filepath_catalog
+    ))
+    cr_catalog <- loadCatalogProfiles(filepath_catalog)
+    ## calculate HTTr non-selective points of departure
+    message("summarizing HTTr non-selective PODs")
+    cr_burst <- getOverallBMD(cr_catalog, rcas)
+
+    # load Tier 2 data:
+    ## MC5 data for orthogonal endpoints
+    if (file.exists(filepath_mc5_selected)) {
+        message(gettextf("loading mc5 table from %s", filepath_mc5_selected))
+        load(filepath_mc5_selected)
+    } else {
+        stop(gettextf(
+            "%s not found; run selectHTSEndpoints() to generate mc5 table",
+            filepath_mc5_selected
+        ))
+    }
+    ## ace/gene/cytotox tables
+    if (file.exists(filepath_mc5_ace)) {
+        message(gettextf("loading ace/gene/cytotox tables from %s", filepath_mc5_ace))
+        load(filepath_mc5_ace)
+    } else {
+        stop(gettextf(
+            "%s not found; run loadAnnotations() to generate ace/gene/cytotox tables",
+            filepath_mc5_ace
+        ))
+    }
+    ## ToxCast non-selective points of departure
+    if (file.exists(filepath_mc5_burst)) {
+        message(gettextf(
+            "loading invitrodb non-selective PODs tables from %s",
+            filepath_mc5_burst
+        ))
+        load(filepath_mc5_burst)
+    } else {
+        stop(gettextf(
+            "%s not found; run selectHTSEndpoints() to generate burst table",
+            filepath_mc5_burst
+        ))
+    }
+}
+
 loadRCASprofiles <- function(filename_cr) {
     #' Import of RCAS concentration-response profiling results
     #' 
@@ -113,5 +214,3 @@ getOverallBMD <- function(cr_catalog, rcas) {
         )
     return(overall)
 }
-
-loadAllHTS <- function() {}

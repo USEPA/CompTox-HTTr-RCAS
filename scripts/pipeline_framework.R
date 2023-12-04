@@ -55,26 +55,6 @@ loadCatalogProfiles <- function(filepath_catalog) {
     return(cr_processed)
 }
 
-calcMode <- function(data) {
-    #' Helper function to calculate 1st statistical mode
-    #' 
-    #' @param data numeric | vector of values to calculate mode from
-    #' @return numeric estimate of 1st statistical mode
-    #' @export
-    if (length(data) < 10) {
-        return(2)
-    } else {
-        # estimate probability density function
-    dens <- density(data)
-    md <- dens$x[which.max(dens$y)]
-    }
-    if (length(md) == 1) {
-        return(md)
-    } else {
-        return(min(md))
-    }
-}
-
 getOverallBMD <- function(cr_catalog, rcas) {
     #' Calculate overall benchmark doses for HTTr catalog signatures
     #' 
@@ -134,4 +114,4 @@ getOverallBMD <- function(cr_catalog, rcas) {
     return(overall)
 }
 
-loadAllHTS <- function()
+loadAllHTS <- function() {}

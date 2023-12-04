@@ -17,6 +17,7 @@ selectHTSEndpoints <- function(
     filepath_save_mc5 = "data/examples/invitrodb_v3_4_filtered_mc5.RData",
     filepath_save_ace = "data/examples/invitrodb_v3_4_assay_information.RData",
     filepath_save_sc2 = "data/examples/invitrodb_v3_4_sc2.RData",
+    filepath_save_burst = "data/examples/invitrodb_v3_4_burst.RData",
     filepath_load_refchem = NULL
 ) {
     #' Conduct selection of selective endpoints from invitrodb
@@ -103,9 +104,7 @@ selectHTSEndpoints <- function(
         group_by(aeid) %>%
         mutate(chems_measured = n()) %>%
         ungroup()
-    # mc5_refchems <- filter(
-    #     mc5_full, dsstox_substance_id %in% refchem_targets$dsstox_substance_id
-    # )
+
     sc2_full <- sc2 %>%
         mutate(
             ref_class = refchem_assign$cluster_target[
@@ -116,9 +115,11 @@ selectHTSEndpoints <- function(
         group_by(aeid) %>%
         mutate(chems_measured = n()) %>%
         ungroup()
-    # sc2_refchems <- filter(
-    #     sc2_full, dsstox_substance_id %in% refchem_targets$dsstox_substance_id
-    # )
+    
+    # calculate non-selective burst values + save to file
+    mc5_burst <- calcBurstMC5(mc5_full)
+    save(mc5_burst, file = filepath_save_burst)
+    message(gettextf("mc5_burst saved to %s", filepath_save_burst))
 
     # find aeids for gene symbols related to refchemdb clusters
     mc5_measured <- data.frame()
@@ -562,4 +563,68 @@ selectEndpoints <- function(conf_activity, conf_potency) {
         pull(aenm) %>%
         unique()
     return(endpoints_remove)
+}
+
+calcMode <- function(data) {
+    #' Helper function to calculate 1st statistical mode
+    #' 
+    #' @param data numeric | vector of values to calculate mode from
+    #' @return numeric estimate of 1st statistical mode
+    #' @export
+    if (length(data) < 10) {
+        return(2)
+    } else {
+        # estimate probability density function
+    dens <- density(data)
+    md <- dens$x[which.max(dens$y)]
+    }
+    if (length(md) == 1) {
+        return(md)
+    } else {
+        return(min(md))
+    }
+}
+
+calcBurstMC5 <- function(mc5_full) {
+    #' Estimate non-selective points of departure from ToxCast endpoints
+    #' 
+    #' For each dtxsid, summary statistics for each profile of ACCs are computed
+    #' for use in determining Tier 2 assessment outcomes. Note that chemicals
+    #' with <10 bioactive endpoints (hitcall == 1 & <3 flags)
+    #' are delineated here calculation of medians/modes, as bioactivity among
+    #' any endpoint for these chemicals would be considered "selective", and
+    #' therefore modes of signature-level bioactivity are set to a default
+    #' inactive dose (2-log10(uM)).
+    #' 
+    #' @param mc5_full data.table | table of table of invitrodb concentration
+    #'  -response estimates as output during selectHTSEndpoints().
+    #' @return data.table of summary points of departure for each spid,
+    #'  including (1) median log10(ACC), (2) 5th percentile log10(ACC), (3)
+    #'  absolute 5th log10(ACC), and (4) statistical mode of log10(ACC).
+    #' @example
+    #' @return
+    # compile burst estimates for full screen
+    mc5_burst <- mc5_full %>%
+        filter(use.me == 1) %>%
+        group_by(dsstox_substance_id) %>%
+        mutate(
+            n_bioactive = n(),
+            specific_crit = case_when(
+                        n_bioactive < 10 ~ "n<10",
+                        TRUE ~ "median_bioactive"
+            )
+        ) %>%
+        summarise(
+            across(
+                .cols = c(
+                    spid, casn, chnm, n_bioactive, specific_crit
+                ),
+                .fns = first
+            ),
+            modl_acc_med = median(modl_acc, na.rm = TRUE),
+            modl_acc_5 = quantile(modl_acc, probs = c(0.05), na.rm = TRUE),
+            modl_acc_abs5 = nth(modl_acc, 5, order_by = modl_acc),
+            modl_acc_mode = calcMode(modl_acc)
+        )
+    return(mc5_burst)
 }

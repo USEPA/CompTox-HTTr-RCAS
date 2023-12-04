@@ -3,6 +3,7 @@
 library(dplyr)
 library(tidyr)
 library(openxlsx)
+source("scripts/pipeline_RCAS_generation.R")
 source("scripts/pipeline_RCAS_profiling.R")
 source("scripts/pipeline_HTS_selection.R")
 
@@ -105,6 +106,23 @@ runFramework <- function(
             filepath_mc5_burst
         ))
     }
+
+    
+    # subset Tier 1/2 data for chems profiled in Tier 1 RCAS
+    cr_catalog_rcas <- filter(cr_catalog, dtxsid %in% cr_rcas$dtxsid)
+    cr_burst_rcas <- filter(cr_burst, dtxsid %in% cr_rcas$dtxsid)
+    chems_filtered_rcas <- filter(
+        chems_filtered, dsstox_substance_id %in% cr_rcas$dtxsid
+    )
+    mc5_burst_rcas <- filter(mc5_burst, dsstox_substance_id %in% cr_rcas$dtxsid)
+
+    # subset Tier 2 data for endpoints matching each Tier 1 RCAS
+    chems_match_rcas <- harmonizeTargetNames(cr_rcas, chems_filtered_rcas)
+
+    # combine Tier 1/2 tables
+    compare <- combineTiers(
+        cr_rcas, cr_burst_rcas, chems_match_rcas, mc5_burst_rcas
+    )
 }
 
 loadRCASprofiles <- function(filename_cr) {
@@ -213,4 +231,73 @@ getOverallBMD <- function(cr_catalog, rcas) {
             ]
         )
     return(overall)
+}
+
+harmonizeTargetNames <- function(cr_rcas, chems_filtered_rcas) {
+    #' Harmonize names of target classes between Tier 1/2 data
+    #' 
+    #' @param cr_rcas
+    #' @param chems_filtered_rcas
+    #' @return
+    #' @example
+    #' @export
+    # isolate rcas names + mc5 `assay_target` names
+    names_rcas <- gsub(
+        "u2os_|heparg_|mcf7_",
+        "",
+        gsub("_up|_dn", "", unique(cr_rcas$signature))
+    )
+    names_mc5 <- data.frame(
+        assay_target = unique(chems_filtered_rcas$assay_target)
+    )
+    # convert mc5 assay_targets to rcas names
+    rcas_mc5 <- cleanRefLabels(names_mc5, "assay_target")
+    colnames(rcas_mc5) <- "rcas_label"
+    rcas_mc5 <- cbind(names_mc5, rcas_mc5)
+    # filter mc5 names for those in httr
+    rcas_filtered <- filter(rcas_mc5, rcas_label %in% names_rcas)
+    # filter mc5 data for endpoints matching httr rcas
+    chems_match_rcas <- chems_filtered_rcas %>%
+        filter(assay_target %in% rcas_filtered$assay_target) %>%
+        mutate(assay_rcas = rcas_filtered$rcas_label[
+            match(assay_target, rcas_filtered$assay_target)
+        ])
+    return(chems_match_rcas)
+}
+
+combineTiers <- function(
+    cr_rcas, cr_burst_rcas, chems_match_rcas, mc5_burst_rcas
+) {
+    #' Combine Tier 1/2 data streams into a single table
+    #' 
+    #' @param cr_rcas
+    #' @param cr_burst_rcas
+    #' @param chems_match_rcas
+    #' @param mc5_burst_rcas
+    #' @return
+    #' @example
+    #' @export
+    # combine Tier 1 RCAS/burst measurements + define Tier 1 criteria
+    compare <- cr_rcas %>%
+        mutate(
+            bmd_log = case_when(
+                hitcall >= 0.9 & top_over_cutoff >= 1.5 ~ log10(bmd),
+                TRUE ~ 2.5
+            )
+        ) %>%
+        left_join(
+            ., select(
+                cr_burst_rcas,
+                dtxsid, specific_crit, bmd_log_med, bmd_log_mode, threshold_1sd
+            ),
+            by = "dtxsid"
+        ) %>%
+        mutate(
+            specific_crit = case_when(is.na(specific_crit) ~ "n<10", TRUE ~ specific_crit),
+            bmd_log_med = case_when(is.na(bmd_log_med) ~ 2.5, TRUE ~ bmd_log_med),
+            bmd_log_mode = case_when(is.na(bmd_log_mode) ~ 2.5, TRUE ~ bmd_log_mode),
+            threshold_1sd = case_when(is.na(threshold_1sd) ~ 2, TRUE ~ threshold_1sd),
+            tier1_positive = bmd_log < 2.5,
+            tier1_selective_1sd = bmd_log < threshold_1sd
+        )
 }

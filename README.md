@@ -19,7 +19,9 @@ Also included are scripts used to conduct all statistical analyses in the paper,
 
 Clone this directory onto your desired path for access to all scripts:
 
-`git clone https://github.com/jessedrogers/NAM-integration/`
+```
+git clone https://github.com/jessedrogers/NAM-integration/
+```
 
 Note that these scripts will generate two directories in the parent folder to your desired path (`../input` and `../output`), as expected by httrpathway. These directories and sub-directories will store intermediate and final transcriptomic data for use in signature concentration-response profiling, and necessary filespace should be dedicated for intermediate files of large HTTr screens (~8GB).
 

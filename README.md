@@ -27,9 +27,9 @@ Note that these scripts will generate two directories in the parent folder to yo
 
 ## Usage
 
-See vignettes (TBD) for full examples of code usage. Each pipeline script contains a runtime function for performing steps in the function:
+See vignettes (TBD) for full examples of code usage. Each R script contains a runtime function for performing steps in the pipeline:
 
-Step | Script | Runtime Function | Intended Function
+Step | Script Name | Runtime Function | Intended Function
 |----|------|------------------|------------------|
 | 1 | `pipeline_refchem_assignment.R` | `assignRefChems()` | Assign reference chemical clusters from RefChemDB |
 | 2 | `pipeline_RCAS_generation.R` | `analyzeHTrANOVA()` | Generate RCAS from gene-level HTTr data |

@@ -15,17 +15,29 @@ This code makes use of these sources in several major steps: assigning reference
 
 Also included are scripts used to conduct all statistical analyses in the paper, as well as vignettes for generating reference chemicals, RCAS, and running the prioritization pipeline.  
 
-## Usage and Examples
-
-TBA
-
 ## Installation
 
-### R install
+Clone this directory onto your desired path for access to all scripts:
+
+`git clone https://github.com/jessedrogers/NAM-integration/`
+
+Note that these scripts will generate two directories in the parent folder to your desired path (`../input` and `../output`), as expected by httrpathway. These directories and sub-directories will store intermediate and final transcriptomic data for use in signature concentration-response profiling, and necessary filespace should be dedicated for intermediate files of large HTTr screens (~8GB).
+
+## Usage
+
+See vignettes (TBD) for full examples of code usage. Each pipeline script contains a runtime function for performing steps in the function:
+
+Step | Script | Runtime Function | Intended Function
+|----|------|------------------|------------------|
+| 1 | `pipeline_refchem_assignment.R` | `assignRefChems()` | Assign reference chemical clusters from RefChemDB |
+| 2 | `pipeline_RCAS_generation.R` | `analyzeHTrANOVA()` | Generate RCAS from gene-level HTTr data |
+| 3 | `pipeline_RCAS_profiling.R` | `profileRCAS()`| Perform concentration-response profiling of RCAS from HTTr data |
+| 4 | `pipeline_HTS_selection.R` | `selectHTSEndpoints()` | Select orthogonal ToxCast endpoints from InvitroDB with high specificity |
+| 5 | `pipeline_framework.R` | `runFramework()` | Perform target-based hazard assessment of HTTr/ToxCast-profiled chemicals using tiered framework | 
+
+## Dependencies
 
 All code was written and tested using R 3.6.0, and should run using later versions.
-
-### R package dependencies
 
 | Use Case | Package(s)
 |---------|---------|

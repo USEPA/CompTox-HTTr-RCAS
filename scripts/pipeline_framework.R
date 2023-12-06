@@ -108,7 +108,7 @@ runFramework <- function(
     }
 
     
-    # subset Tier 1/2 data for chems profiled in Tier 1 RCAS
+    # subset Tier 1/2 data for dtxsids profiled in Tier 1 RCAS
     cr_catalog_rcas <- filter(cr_catalog, dtxsid %in% cr_rcas$dtxsid)
     cr_burst_rcas <- filter(cr_burst, dtxsid %in% cr_rcas$dtxsid)
     chems_filtered_rcas <- filter(
@@ -160,6 +160,30 @@ runFramework <- function(
             across(c(tier2_positive, tier2_selective, tier2_conflict), any),
             .groups = "drop"
         )
+    # label tier + overall assessment outcomes
+    compare_sum <- compare_sum %>%
+        mutate(
+            outcome_tier1 = case_when(
+                tier1_positive & tier1_selective ~ "selective",
+                tier1_positive & !tier1_selective ~ "positive",
+                TRUE ~ "negative"
+            ),
+            outcome_tier2 = case_when(
+                tier2_positive & tier2_selective ~ "selective",
+                tier2_positive & !tier2_selective ~ "positive",
+                TRUE ~ "negative"
+            ),
+            outcome_all = case_when(
+                outcome_tier1 == "selective" & outcome_tier2 == "selective" ~ "tier2_selective",
+                outcome_tier1 == "selective" & outcome_tier2 == "positive" ~ "tier2_positive",
+                outcome_tier1 == "selective" & outcome_tier2 == "negative" ~ "tier1_selective",
+                outcome_tier1 == "positive" ~ "tier1_positive",
+                outcome_tier1 == "negative" ~ "tier1_negative"
+            )
+        )
+    # export full/summary tables to file
+    save(compare_full, compare_sum, file = filepath_export)
+    return(compare_sum)
 }
 
 loadRCASprofiles <- function(filename_cr) {

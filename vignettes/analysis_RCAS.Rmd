@@ -9,13 +9,20 @@ output:
     toc_float: true
     number_sections: true
     df_print: paged
-    code_folding: hide
+    code_folding: show
 ---
 
 Extraction and analyis of Reference Class Associated Signatures (RCAS)
 using U-2 OS and HepaRG chemical screening data. RCAS represent
 unique gene sets more potent for individual classes of chemicals versus
 those annotated for other modes-of-action.
+
+Genes are selected by comparing benchmark doses (BMDs) as potency estimates
+across classes of reference chemicals assigned to similar modes-of-action, and
+genes uniquely potent for individual reference classes are selected as part of a
+signature for that class:
+
+![](Fig1A.png)
 
 # Setup Environment
 
@@ -79,14 +86,14 @@ refchem_assign %>%
 
 # Generate RCAS
 
-## Conduct univariate potency analysis
-
 Gene sets are generated for reference classes using High-Throughput
 Transcriptomics (HTTr) screening data of 1,201 chemicals in U-2 OS and 
 HepaRG cell lines. Gene-level potency estimates were previously generated from
 DESeq2-moderated fold changes using the httrpathway package
 [available on USEPA Github](https://github.com/USEPA/CompTox-httrpathway), and 
 are used as the basis for determining gene sets.
+
+## Conduct univariate potency analysis
 
 `analyzeHTTrANOVA()` can take some time to run if many significant
 genes are found (compiling HepaRG-based RCAS below takes ~10 minutes). Here, 
@@ -162,7 +169,7 @@ composite_all %>%
 
 ## Compare RCAS gene-level potency estimates
 
-```{r compare-gene-potency}
+```{r ht-fcn, class.source = 'fold-hide'}
 plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
   if (is.data.frame(composite) & title %in% composite$source) {
     rcas.vars <- composite %>%
@@ -243,7 +250,9 @@ plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
   )
   return(rcas.ht)
 }
+```
 
+```{r compare-gene-potency}
 # rename select refchems to common names
 rename_dtxsids <- c("DTXSID8023474", "DTXSID6040745", "DTXSID9040760")
 rename_names <- c("Pimozide", "L-165041", "GW0742")

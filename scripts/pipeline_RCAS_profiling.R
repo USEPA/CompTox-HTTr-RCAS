@@ -304,9 +304,10 @@ makeCatalog <- function(rcas, catalog_name = "signatureDB_master_catalog.xlsx", 
             subsource = "-",
             type = "nondirectional",
             direction = "nondirectional",
-            description = paste0("Signature for randomization test: ", names(random.heparg)),
+            description = "Signature for randomization test",
             target_class = "Random",
-            super_target = "Random"
+            super_target = "Random",
+            rcas = 1
         )
         sigcatalog <- rbind(sigcatalog, randomcat)
     }

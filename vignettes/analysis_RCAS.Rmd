@@ -1,0 +1,163 @@
+---
+title: "RCAS Generation and Concentration-Response Profiling"
+author: "Jesse Rogers"
+date: "December 6, 2023"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+---
+
+Extraction and analyis of Reference Class Associated Signatures (RCAS)
+using U-2 OS and HepaRG chemical screening data. RCAS represent
+unique gene sets more potent for individual classes of chemicals versus
+those annotated for other modes-of-action.
+
+# Setup Environment
+
+```{r env-setup, message=FALSE}
+# import packages for visualization
+# (note that other required packages will be imported by R scripts)
+library(ggplot2)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+
+# set directories (`dir_home` should be set to the top-level directory)
+dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
+dir_scripts <- paste0(dir_home, "scripts/")
+setwd(dir_home)
+
+# import scripts for RCAS generation and profiling
+source(paste0(dir_scripts, "pipeline_refchem_assignment.R"))
+source(paste0(dir_scripts, "pipeline_RCAS_generation.R"))
+source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
+```
+
+# Assign Reference Chemicals
+
+Reference classes are developed using
+[RefChemDB](https://doi.org/10.1186/s13040-022-00292-z) by
+assigning chemicals to clusters of target-mode combinations. Chemicals are
+assigned using a rule-based procedure:
+
+-   Hierarchically cluster target_mode entries based on Jaccard distance 
+    -   Determine clusters using a dendrogram height cutoff of 0.8 
+-   For each chemical, count the number of target_mode entries that belong to 
+each cluster 
+-   Assign chemical to cluster with highest count 
+    -   Settle ties using total support for each cluster (sum(support) for all 
+target_mode entries in a cluster) 
+    -   Remove remaining ties (equal target representation and support) 
+-   Remove clusters with <3 chemicals assigned
+-   Cluster labels assigned based on most frequent target_mode entries within
+each cluster
+
+```{r assign-refchems}
+# assign reference chemicals from RefChemDB and export to file
+path_refchems <- "data/examples/refchemdb_clusters.RData"
+refchem_assign <- assignRefChems(path_refchems)
+
+# summarize chemicals represented by clusters
+refchem_assign %>%
+    count(cluster, cluster_target) %>%
+    arrange(desc(n)) %>%
+    DT::datatable()
+```
+
+# Generate RCAS
+
+## Conduct univariate potency analysis
+
+Gene sets are generated for reference classes using High-Throughput
+Transcriptomics (HTTr) screening data of 1,201 chemicals in U-2 OS and 
+HepaRG cell lines. Gene-level potency estimates were previously generated from
+DESeq2-moderated fold changes using the httrpathway package
+[available on USEPA Github](https://github.com/USEPA/CompTox-httrpathway), and 
+are used as the basis for determining gene sets.
+
+`analyzeHTTrANOVA()` can take some time to run if many significant
+genes are found (compiling HepaRG-based RCAS below takes ~10 minutes). Here, 
+RCAS objects are pre-generated and saved in the `data/examples` directory.
+
+```{r generate-rcas, eval=FALSE}
+# specify paths for httr gene-level potency estimates
+path_httr <- c(
+  "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_heparg2d_toxcast_pfas_pe1_normal_0.05_conthits.RData",
+  "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_u2os_toxcast_pfas_pe1_normal_0.05_conthits.RData"
+)
+path_rcas <- c(
+    paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
+    paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+)
+
+# generate RCAS for each dataset
+rcas_heparg <- analyzeHTTrANOVA(
+    filepath.data = path_httr[1],
+    filepath.ref = path_refchems,
+    col.httr.type = "gene",
+    col.ref.class = "cluster_target",
+    metric.fill = 2.5
+)
+save(rcas_heparg, file = path_rcas[1])
+
+rcas_u2os <- analyzeHTTrANOVA(
+    filepath.data = path_httr[2],
+    filepath.ref = path_refchems,
+    col.httr.type = "gene",
+    col.ref.class = "cluster_target",
+    metric.fill = 2.5
+)
+save(rcas_u2os, file = path_rcas[2])
+
+# display results for significant genes: U-2 OS
+rcas_u2os$posthoc.estimate$posthoc.sig %>%
+    mutate(across(where(is.numeric), ~ signif(.x, 3))) %>%
+    DT::datatable()
+```
+
+## Select final RCAS genes
+
+Following ANOVA-based potency comparisons per gene, final gene sets are
+constructed for each reference class by selecting genes whose BMD values are
+significantly lower for a single class versus at least 70% of other classes.
+RCAS are retained for each target if at least 10 genes meet this criterion.
+
+Note that this selection step is performed within `profileRCAS()` and is done
+here for visualizing RCAS sizes/potencies.
+
+```{r compile-rcas}
+# perform RCAS selection for each object
+composite_heparg <- selectRCASGenes(path_rcas[1])
+composite_u2os <- selectRCASGenes(path_rcas[2])
+
+# combine rcas for each cell type
+composite_all <- rbind(
+    mutate(
+        composite_heparg$composite,
+        source = "heparg",
+        n_classes = length(unique(composite_heparg$httr.wide$ref_class))
+    ),
+    mutate(
+        composite_u2os$composite,
+        source = "u2os",
+        n_classes = length(unique(composite_u2os$httr.wide$ref_class))
+    )
+)
+
+# compare sizes of retained RCAS
+composite_all %>%
+    count(source, class_1) %>%
+    rename(class = class_1, size = n) %>%
+    DT::datatable()
+```
+
+# Reproducibility
+
+```{r reproducibility}
+sessionInfo()
+```

@@ -30,12 +30,16 @@ library(circlize)
 # set directories (`dir_home` should be set to the top-level directory)
 dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
 dir_scripts <- paste0(dir_home, "scripts/")
-setwd(dir_home)
 
 # import scripts for RCAS generation and profiling
 source(paste0(dir_scripts, "pipeline_refchem_assignment.R"))
 source(paste0(dir_scripts, "pipeline_RCAS_generation.R"))
 source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
+
+path_rcas <- c(
+    paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
+    paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+)
 ```
 
 # Assign Reference Chemicals
@@ -59,8 +63,12 @@ each cluster
 
 ```{r assign-refchems}
 # assign reference chemicals from RefChemDB and export to file
-path_refchems <- "data/examples/refchemdb_clusters.RData"
-refchem_assign <- assignRefChems(path_refchems)
+path_refchems <- paste0(dir_home, "data/examples/refchemdb_clusters.RData")
+if (!file.exists(path_refchems)) {
+  refchem_assign <- assignRefChems(path_refchems)
+} else {
+  load(path_refchems)
+}
 
 # summarize chemicals represented by clusters
 refchem_assign %>%
@@ -89,10 +97,6 @@ RCAS objects are pre-generated and saved in the `data/examples` directory.
 path_httr <- c(
   "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_heparg2d_toxcast_pfas_pe1_normal_0.05_conthits.RData",
   "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_u2os_toxcast_pfas_pe1_normal_0.05_conthits.RData"
-)
-path_rcas <- c(
-    paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
-    paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
 )
 
 # generate RCAS for each dataset
@@ -154,6 +158,108 @@ composite_all %>%
     count(source, class_1) %>%
     rename(class = class_1, size = n) %>%
     DT::datatable()
+```
+
+## Compare RCAS gene-level potency estimates
+
+```{r compare-gene-potency}
+plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
+  if (is.data.frame(composite) & title %in% composite$source) {
+    rcas.vars <- composite %>%
+      filter(source == title) %>%
+      pull(variable)
+    rcas.vars <- gsub("\`", "", rcas.vars)
+    rcas.varclass <- composite %>%
+      filter(source == title) %>%
+      pull(class_1)
+    # get classes/chems with passing variables
+    rcas.classes.unique <- composite %>%
+      filter(source == title) %>%
+      pull(class_1) %>%
+      unique()
+    rcas.names <- rcas$httr.wide %>%
+      filter(ref_class %in% rcas.classes.unique) %>%
+      pull(name)
+    rcas.classes <- rcas$httr.wide %>%
+      filter(ref_class %in% rcas.classes.unique) %>%
+      pull(ref_class)
+    # filter log(bmd) data for variables + chems
+    rcas.mat <- rcas$httr.wide %>%
+      filter(ref_class %in% rcas.classes.unique) %>%
+      select(any_of(rcas.vars)) %>%
+      as.matrix()
+    rownames(rcas.mat) <- rcas.names
+  } else {
+    rcas.vars <- rcas$posthoc.estimate$posthoc.vars
+    rcas.vars <- gsub("\`", "", rcas.vars)
+
+    rcas.mat <- rcas$httr.wide %>%
+      select(any_of(rcas.vars)) %>%
+      as.matrix()
+    rcas.classes.unique <- unique(rcas$httr.wide$ref_class)
+    rcas.names <- rcas$httr.wide$name
+    rcas.classes <- rcas$httr.wide$ref_class
+    rownames(rcas.mat) <- stringr::str_trunc(rcas.names, 20)
+  }
+  # construct annotation color palette
+  rcas.palette <- colorRampPalette(
+      brewer.pal(8, "Set2")
+    )(length(unique(composite$class_1)))
+  names(rcas.palette) <- unique(composite$class_1)
+  # plot heatmap
+  rcas.ht <- Heatmap(
+    rcas.mat,
+    colorRamp2(c(-2.5, -1.25, 0, 1.25, 2.5), rev(brewer.pal(5, "Spectral"))),
+    name = paste0("log10(BMD)"),
+    column_title = paste0("RCAS-identified genes: ", gsub("_", " ", title)),
+    column_title_gp = gpar(fontsize = 8),
+    row_title = "Reference Chemical",
+    row_title_gp = gpar(fontsize = 8),
+    left_annotation = rowAnnotation(
+      reference_class = rcas.classes,
+      col = list(reference_class = rcas.palette),
+      show_annotation_name = FALSE,
+      annotation_legend_param = list(
+        reference_class = list(direction = "horizontal", nrow = 2)
+      ),
+      annotation_width = unit(0.2, "cm")
+    ),
+    top_annotation = HeatmapAnnotation(
+      variable_class = rcas.varclass,
+      col = list(variable_class = rcas.palette),
+      show_annotation_name = FALSE,
+      show_legend = FALSE,
+      annotation_height = unit(0.2, "cm")
+    ),
+    row_split = rcas.classes,
+    column_labels = rep("", ncol(rcas.mat)),
+    row_names_gp = gpar(fontsize = 7),
+    heatmap_legend_param = list(
+      direction = "horizontal",
+      at = seq(-3, 3, 1)
+    ),
+    width = unit(width, "cm"),
+    height = unit(height, "cm")
+  )
+  return(rcas.ht)
+}
+
+# rename select refchems to common names
+rename_dtxsids <- c("DTXSID8023474", "DTXSID6040745", "DTXSID9040760")
+rename_names <- c("Pimozide", "L-165041", "GW0742")
+for (idx in seq_len(length(rename_dtxsids))) {
+  composite_heparg$httr.wide$name[composite_heparg$httr.wide$dtxsid == rename_dtxsids[idx]] <- rename_names[idx]
+  composite_u2os$httr.wide$name[composite_u2os$httr.wide$dtxsid == rename_dtxsids[idx]] <- rename_names[idx]
+}
+# plot heatmaps
+ht_heparg <- plotHeatmap(
+  composite_heparg, "heparg", composite_all, width = 6, height = 6
+)
+draw(ht_heparg, merge_legend = TRUE, heatmap_legend_side = "bottom")
+ht_u2os <- plotHeatmap(
+  composite_u2os, "u2os", composite_all, width = 6, height = 4.8
+)
+draw(ht_u2os, merge_legend = TRUE, heatmap_legend_side = "bottom")
 ```
 
 # Reproducibility

@@ -89,7 +89,7 @@ refchem_assign %>%
 Gene sets are generated for reference classes using High-Throughput
 Transcriptomics (HTTr) screening data of 1,201 chemicals in U-2 OS and 
 HepaRG cell lines. Gene-level potency estimates were previously generated from
-DESeq2-moderated fold changes using the httrpathway package
+DESeq2-moderated fold changes using the `httrpathway` package
 [available on USEPA Github](https://github.com/USEPA/CompTox-httrpathway), and 
 are used as the basis for determining gene sets.
 
@@ -270,6 +270,138 @@ ht_u2os <- plotHeatmap(
 )
 draw(ht_u2os, merge_legend = TRUE, heatmap_legend_side = "bottom")
 ```
+
+# Profile RCAS
+
+Resulting RCAS for each reference class are subsequently used to profile
+targeted bioactivitiy across all 1,201 chemicals screened in U-2 OS/HepaRG
+cell lines. Signature-level profiling is conducted using `httrpathway`, which
+performs ssGSEA  ([Barbie et al. 2009](https://doi.org/10.1038/nature08460))
+for each chemical-dose group for each RCAS and subsequently conducts
+concentration profiling for each chemical and RCAS via the `tcplfit2` package
+([Sheffield et al 2022](https://doi.org/10.1093/bioinformatics/btab779)).
+
+Notes:
+
+-   Current scripts assume access to the HTTr internal EPA mongodb for accessing log2(fold-change) data. Future versions of this data may be hosted on Clowder as flat files and available for public use.
+  -   For mongodb access, user credentials shold be stored in user's home directory under `~/.mongopw`, following a json structure per study.
+  -   Current scripts also assume installation of the `httrlib` package (currently available for internal use only). Alternatively, these functions can be sourced from the httrpathway cloned repository using `source("../httrpathway/httrpl/Rlib/httrpl.R", chdir = TRUE)`.
+-   **Import and processing of log2(fold-change) data will take a long time (1-1.5 hours per dataset)**
+
+```{r profile-rcas, eval=FALSE}
+# define mongodb connection and export args
+db_host <- "ccte-mongodb-res.epa.gov"
+db_names <- c(
+  "res_httr_heparg2d_toxcast",
+  "res_httr_u2os_toxcast"
+)
+fc1_names <- c(
+  "heparg_fc1_rcas.RData",
+  "u2os_fc1_rcas.RData"
+)
+catalog_names = c(
+  "signatureDB_rcas_heparg.xlsx",
+  "signatureDB_rcas_u2os.xlsx"
+)
+
+# run RCAS profiling per cell type
+profileRCAS(
+  filepath_rcas = path_rcas[1],
+  db_host = db_host,
+  db_name = db_names[1],
+  fc1_name = fc1_names[1],
+  random_sigs = TRUE,
+  catalog_name = catalog_names[1]
+)
+profileRCAS(
+  filepath_rcas = path_rcas[2],
+  db_host = db_host,
+  db_name = db_names[2],
+  fc1_name = fc1_names[2],
+  random_sigs = TRUE,
+  catalog_name = catalog_names[2]
+)
+```
+
+## Compare RCAS signature-level potency estimates
+
+Signature-level curve fits are extracted for all chemicals used in RCAS
+generation for comparison of potency/efficacy estimates. Estimates are 
+compared between in-class chemicals (i.e. reference class matches RCAS) and
+out-of-class chemicals (i.e. reference class does not match RCAS) as validation
+of performance of signature-level profiling against the reference set.
+
+```{r compare-signature-potency}
+# import RCAS signature results
+dir_cr <- "../output/signature_conc_resp_summary/"
+db_names <- c(
+  "res_httr_heparg2d_toxcast",
+  "res_httr_u2os_toxcast"
+)
+files_cr <- paste0("SIGNATURE_CR_rcas_", db_names, "_gsea_0.05_conthits.RData")
+load(paste0(dir_cr, files_cr[1]))
+cr_heparg <- SIGNATURE_CR
+load(paste0(dir_cr, files_cr[2]))
+cr_u2os <- SIGNATURE_CR
+rm(SIGNATURE_CR)
+
+# combine results across cell types + filter for reference chemicals
+cr_all <- rbind(
+  mutate(cr_heparg, source = "heparg"),
+  mutate(cr_u2os, source = "u2os")
+)
+cr_refchems <- rbind(
+  filter(mutate(cr_heparg, source = "heparg"), dtxsid %in% composite_heparg$ref$dtxsid),
+  filter(mutate(cr_u2os, source = "u2os"), dtxsid %in% composite_u2os$ref$dtxsid)
+) %>%
+  mutate(ref_class = composite_heparg$ref$ref_class[
+    match(dtxsid, composite_heparg$ref$dtxsid)
+  ])
+
+
+# visualize potency/efficacy for each class
+for (idx in seq_len(length(rename_dtxsids))) {
+  cr_refchems$name[cr_refchems$dtxsid == rename_dtxsids[idx]] <- rename_names[idx]
+}
+plot_pot_eff <- cr_refchems %>%
+  filter(!grepl("Random", signature)) %>%
+  mutate(
+    bmd_log = case_when(!is.na(bmd) ~ log10(bmd), TRUE ~ 2.5),
+    toc_signed = top_over_cutoff * sign(top),
+    pass_bioactivity = hitcall >= 0.9 & top_over_cutoff >= 1.5,
+    source_signature = paste0(source, "_", signature),
+    in_class = ref_class == signature,
+  ) %>%
+  ggplot(aes(
+      bmd_log, toc_signed,
+      color = in_class,
+      shape = pass_bioactivity,
+      label = stringr::str_trunc(name, 30)
+  )) +
+  geom_point(alpha = 0.9) +
+  geom_hline(yintercept = 0, color = "grey50") +
+  geom_hline(
+      yintercept = c(-1.5, 1.5),
+      linetype = "dashed", color = "grey50"
+  ) +
+  scale_shape_manual(values = c(3, 16)) +
+  scale_color_brewer(palette = "Set1") +
+  facet_wrap(~source_signature) +
+  labs(
+      x = "log10(BMD)", y = "Signed Top Over Cutoff",
+      color = "Chemical in\nreference\nclass",
+      shape = "Passed\nbioactivity\nthresholds",
+      title = ""
+  ) +
+  theme_bw() +
+  theme(legend.direction = "vertical")
+
+plot_pot_eff
+```
+
+## Conduct randomization test
+
+
 
 # Reproducibility
 

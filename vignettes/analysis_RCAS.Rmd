@@ -37,6 +37,7 @@ library(circlize)
 # set directories (`dir_home` should be set to the top-level directory)
 dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
 dir_scripts <- paste0(dir_home, "scripts/")
+setwd(dir_home)
 
 # import scripts for RCAS generation and profiling
 source(paste0(dir_scripts, "pipeline_refchem_assignment.R"))
@@ -358,6 +359,16 @@ cr_refchems <- rbind(
     match(dtxsid, composite_heparg$ref$dtxsid)
   ])
 
+# annotate results with in-class/out-of-class + bioactivity classifications
+cr_refchems <- cr_refchems %>%
+  mutate(
+    bmd_log = case_when(!is.na(bmd) ~ log10(bmd), TRUE ~ 2.5),
+    toc_signed = top_over_cutoff * sign(top),
+    pass_bioactivity = hitcall >= 0.9 & top_over_cutoff >= 1.5,
+    source_signature = paste0(source, "_", signature),
+    in_class = ref_class == signature
+  )
+
 
 # visualize potency/efficacy for each class
 for (idx in seq_len(length(rename_dtxsids))) {
@@ -365,13 +376,6 @@ for (idx in seq_len(length(rename_dtxsids))) {
 }
 plot_pot_eff <- cr_refchems %>%
   filter(!grepl("Random", signature)) %>%
-  mutate(
-    bmd_log = case_when(!is.na(bmd) ~ log10(bmd), TRUE ~ 2.5),
-    toc_signed = top_over_cutoff * sign(top),
-    pass_bioactivity = hitcall >= 0.9 & top_over_cutoff >= 1.5,
-    source_signature = paste0(source, "_", signature),
-    in_class = ref_class == signature,
-  ) %>%
   ggplot(aes(
       bmd_log, toc_signed,
       color = in_class,
@@ -401,7 +405,168 @@ plot_pot_eff
 
 ## Conduct randomization test
 
+Because limited numbers of reference chemicals preclude the use of 
+cross-validation for signature validation, a randomization test is
+used to test the ability of each reference signature to discern in-class
+reference chemicals compared to a series of randomly-generated signatures.
 
+Random signatures were generated from all RCAS genes in each cell type, and
+signature BMDs were estimated via the `httrpathways` package. 
+Here, random signature BMDs are are used to create a null distribution, and 
+RCAS BMDs are compared to the null for each reference chemical using these
+steps:
+
+- Identify in-class and out-of-class reference chemicals for each RCAS
+- Calculate mean RCAS log10(BMD) for in-class and out-of-class chemicals
+- Calculate mean random signature log10(BMD) for respective chemicals
+    - Repeated for each individual random signature
+- Calculate difference in means between in-class and out-of-class chemicals
+    - Repeated for each reference signature all random signatures
+- Calculate the probability that a random signature has a greater test statistic than the RCAS (p-value)
+
+```{r randomization-test, class.source = 'fold-hide'}
+# for each RCAS, calculate the difference in means between
+# in-class and out-of-class chemicals
+calcRandomizationTest <- function(
+  cr_refchems, bioactive_only = FALSE, downsample = FALSE
+) {
+  set.seed(NULL)
+  # initialize storage objects
+  p.randomtest <- c()
+  df.randomtest <- data.frame()
+  df.sigtest <- data.frame()
+
+  # if bioactive_only flag, filter httr data to bioactive signatures only
+  if (bioactive_only) {
+      cr_refchems <-  filter(cr_refchems, pass_bioactivity)
+  }
+
+  for (sig in unique(cr_refchems$source_signature[!grepl("Random", cr_refchems$signature)])) {
+      celltype = gsub("_.*", "", sig)
+      # get in-class/out-of-class chems for rcas
+      chems.inclass <- cr_refchems %>%
+          filter(source_signature == sig & in_class) %>%
+          pull(dtxsid) %>%
+          unique()
+      chems.outofclass <- cr_refchems %>%
+          filter(source_signature == sig & !in_class) %>%
+          pull(dtxsid)
+      if (downsample) {
+          chems.outofclass <- sample(chems.outofclass, length(chems.inclass) * 3)
+      }
+      # calculate difference in means for rcas bmds
+      mean.inclass <- cr_refchems %>%
+          filter(source_signature == sig & in_class) %>%
+          pull(bmd_log) %>%
+          mean()
+      mean.outofclass <- cr_refchems %>%
+          filter(source_signature == sig & !in_class) %>%
+          pull(bmd_log) %>%
+          mean()
+      mean.difference.refsig <- mean.inclass - mean.outofclass
+
+      # calculate differences in means for random signature bmds
+      mean.inclass <- cr_refchems %>%
+          filter(
+              grepl("Random", signature) &
+              dtxsid %in% chems.inclass &
+              source == celltype
+          ) %>%
+          group_by(signature) %>%
+          summarise(mean_bmd = mean(bmd_log)) %>%
+          pull(mean_bmd)
+      mean.outofclass <- cr_refchems %>%
+          filter(
+              grepl("Random", signature) &
+              dtxsid %in% chems.outofclass &
+              source == celltype
+          ) %>%
+          group_by(signature) %>%
+          summarise(mean_bmd = mean(bmd_log)) %>%
+          pull(mean_bmd)
+      mean.difference.random <- mean.inclass - mean.outofclass
+      # calculate probability that rcas difference in means exceeds
+      # random sig difference in means
+      exceed.count <- length(mean.difference.refsig[
+          abs(mean.difference.random) >= abs(mean.difference.refsig)
+      ])
+      p.random <- exceed.count / length(mean.difference.random)
+      p.randomtest[[sig]] <- p.random
+
+      # save data to dataframes for visualization
+      df.randomtest <- rbind(
+          df.randomtest,
+          data.frame(
+            source_signature = sig,
+            mean_diff = mean.difference.random
+          )
+      )
+      df.sigtest <- rbind(
+          df.sigtest,
+          data.frame(
+            source_signature = sig,
+            mean_diff = mean.difference.refsig,
+            pval = p.random
+          )
+      )
+  }
+  return(
+      list(
+          random = df.randomtest,
+          rcas = df.sigtest,
+          pval = p.randomtest
+      )
+  )
+}
+randomtest <- calcRandomizationTest(cr_refchems, downsample = TRUE)
+randomtest$rcas <- randomtest$rcas %>%
+  mutate(pval_label = case_when(
+    pval == 0 ~ paste0("p < ", nrow(randomtest$rcas) / nrow(randomtest$random)),
+    TRUE ~ paste0("p = ", pval)
+  ))
+```
+
+```{r randomization-summary}
+# visualize difference in means of reference signatures compared to null
+# distributions
+plot_randomtest <- ggplot() +
+  geom_histogram(
+      data = randomtest$random,
+      aes(mean_diff), binwidth = 0.1
+  ) +
+  geom_vline(
+      data = randomtest$rcas, aes(xintercept = mean_diff),
+      linetype = "dashed", color = "#f03406ef"
+  ) +
+  geom_text(
+    data = randomtest$rcas, aes(x = -3.5, y = 40, label = pval_label),
+  ) +
+  facet_wrap(~source_signature) +
+  labs(
+      x = "Mean in-class log10(BMD) -\nMean out-of-class log10(BMD)",
+      y = "Frequency of Random Signatures"
+  ) +
+  theme_bw()
+plot_randomtest
+
+# bootstrap randomization test 100x for downsampling
+df.randomp <- data.frame()
+for (idx in 1:100) {
+    randomtest <- calcRandomizationTest(cr_refchems, downsample = TRUE)
+    df.p <- as.data.frame(randomtest$pval)
+    colnames(df.p) <- "pval"
+    df.p$idx <- idx
+    df.p$signature <- rownames(df.p)
+    rownames(df.p) <- NULL
+    df.randomp <- rbind(df.randomp, df.p)
+}
+df.randomp %>%
+    group_by(signature) %>%
+    summarise(
+      across(pval, list(min = min, mean = mean, median = median, max = max))
+    ) %>%
+    DT::datatable()
+```
 
 # Reproducibility
 

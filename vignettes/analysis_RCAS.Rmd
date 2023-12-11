@@ -300,7 +300,7 @@ fc1_names <- c(
   "heparg_fc1_rcas.RData",
   "u2os_fc1_rcas.RData"
 )
-catalog_names = c(
+catalog_names <- c(
   "signatureDB_rcas_heparg.xlsx",
   "signatureDB_rcas_u2os.xlsx"
 )
@@ -334,7 +334,7 @@ of performance of signature-level profiling against the reference set.
 
 ```{r compare-signature-potency}
 # import RCAS signature results
-dir_cr <- "../output/signature_conc_resp_summary/"
+dir_cr <- "~/NAM-integration/output/signature_conc_resp_summary/"
 db_names <- c(
   "res_httr_heparg2d_toxcast",
   "res_httr_u2os_toxcast"
@@ -362,6 +362,7 @@ cr_refchems <- rbind(
 # annotate results with in-class/out-of-class + bioactivity classifications
 cr_refchems <- cr_refchems %>%
   mutate(
+    signature = gsub("_up|_dn", "", signature),
     bmd_log = case_when(!is.na(bmd) ~ log10(bmd), TRUE ~ 2.5),
     toc_signed = top_over_cutoff * sign(top),
     pass_bioactivity = hitcall >= 0.9 & top_over_cutoff >= 1.5,
@@ -427,6 +428,8 @@ steps:
 ```{r randomization-test, class.source = 'fold-hide'}
 # for each RCAS, calculate the difference in means between
 # in-class and out-of-class chemicals
+
+# set.seed()
 calcRandomizationTest <- function(
   cr_refchems, bioactive_only = FALSE, downsample = FALSE
 ) {

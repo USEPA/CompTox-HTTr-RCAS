@@ -45,8 +45,8 @@ source(paste0(dir_scripts, "pipeline_RCAS_generation.R"))
 source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
 
 path_rcas <- c(
-    paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
-    paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+  paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
 )
 ```
 
@@ -80,9 +80,9 @@ if (!file.exists(path_refchems)) {
 
 # summarize chemicals represented by clusters
 refchem_assign %>%
-    count(cluster, cluster_target) %>%
-    arrange(desc(n)) %>%
-    DT::datatable()
+  count(cluster, cluster_target) %>%
+  arrange(desc(n)) %>%
+  DT::datatable()
 ```
 
 # Generate RCAS
@@ -109,20 +109,20 @@ path_httr <- c(
 
 # generate RCAS for each dataset
 rcas_heparg <- analyzeHTTrANOVA(
-    filepath.data = path_httr[1],
-    filepath.ref = path_refchems,
-    col.httr.type = "gene",
-    col.ref.class = "cluster_target",
-    metric.fill = 2.5
+  filepath.data = path_httr[1],
+  filepath.ref = path_refchems,
+  col.httr.type = "gene",
+  col.ref.class = "cluster_target",
+  metric.fill = 2.5
 )
 save(rcas_heparg, file = path_rcas[1])
 
 rcas_u2os <- analyzeHTTrANOVA(
-    filepath.data = path_httr[2],
-    filepath.ref = path_refchems,
-    col.httr.type = "gene",
-    col.ref.class = "cluster_target",
-    metric.fill = 2.5
+  filepath.data = path_httr[2],
+  filepath.ref = path_refchems,
+  col.httr.type = "gene",
+  col.ref.class = "cluster_target",
+  metric.fill = 2.5
 )
 save(rcas_u2os, file = path_rcas[2])
 
@@ -149,23 +149,23 @@ composite_u2os <- selectRCASGenes(path_rcas[2])
 
 # combine rcas for each cell type
 composite_all <- rbind(
-    mutate(
-        composite_heparg$composite,
-        source = "heparg",
-        n_classes = length(unique(composite_heparg$httr.wide$ref_class))
-    ),
-    mutate(
-        composite_u2os$composite,
-        source = "u2os",
-        n_classes = length(unique(composite_u2os$httr.wide$ref_class))
-    )
+  mutate(
+    composite_heparg$composite,
+    source = "heparg",
+    n_classes = length(unique(composite_heparg$httr.wide$ref_class))
+  ),
+  mutate(
+    composite_u2os$composite,
+    source = "u2os",
+    n_classes = length(unique(composite_u2os$httr.wide$ref_class))
+  )
 )
 
 # compare sizes of retained RCAS
 composite_all %>%
-    count(source, class_1) %>%
-    rename(class = class_1, size = n) %>%
-    DT::datatable()
+  count(source, class_1) %>%
+  rename(class = class_1, size = n) %>%
+  DT::datatable()
 ```
 
 ## Compare RCAS gene-level potency estimates
@@ -211,8 +211,8 @@ plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
   }
   # construct annotation color palette
   rcas.palette <- colorRampPalette(
-      brewer.pal(8, "Set2")
-    )(length(unique(composite$class_1)))
+    brewer.pal(8, "Set2")
+  )(length(unique(composite$class_1)))
   names(rcas.palette) <- unique(composite$class_1)
   # plot heatmap
   rcas.ht <- Heatmap(
@@ -352,8 +352,14 @@ cr_all <- rbind(
   mutate(cr_u2os, source = "u2os")
 )
 cr_refchems <- rbind(
-  filter(mutate(cr_heparg, source = "heparg"), dtxsid %in% composite_heparg$ref$dtxsid),
-  filter(mutate(cr_u2os, source = "u2os"), dtxsid %in% composite_u2os$ref$dtxsid)
+  filter(
+    mutate(cr_heparg, source = "heparg"),
+    dtxsid %in% composite_heparg$ref$dtxsid
+  ),
+  filter(
+    mutate(cr_u2os, source = "u2os"),
+    dtxsid %in% composite_u2os$ref$dtxsid
+  )
 ) %>%
   mutate(ref_class = composite_heparg$ref$ref_class[
     match(dtxsid, composite_heparg$ref$dtxsid)
@@ -378,25 +384,25 @@ for (idx in seq_len(length(rename_dtxsids))) {
 plot_pot_eff <- cr_refchems %>%
   filter(!grepl("Random", signature)) %>%
   ggplot(aes(
-      bmd_log, toc_signed,
-      color = in_class,
-      shape = pass_bioactivity,
-      label = stringr::str_trunc(name, 30)
+    bmd_log, toc_signed,
+    color = in_class,
+    shape = pass_bioactivity,
+    label = stringr::str_trunc(name, 30)
   )) +
   geom_point(alpha = 0.9) +
   geom_hline(yintercept = 0, color = "grey50") +
   geom_hline(
-      yintercept = c(-1.5, 1.5),
-      linetype = "dashed", color = "grey50"
+    yintercept = c(-1.5, 1.5),
+    linetype = "dashed", color = "grey50"
   ) +
   scale_shape_manual(values = c(3, 16)) +
   scale_color_brewer(palette = "Set1") +
   facet_wrap(~source_signature) +
   labs(
-      x = "log10(BMD)", y = "Signed Top Over Cutoff",
-      color = "Chemical in\nreference\nclass",
-      shape = "Passed\nbioactivity\nthresholds",
-      title = ""
+    x = "log10(BMD)", y = "Signed Top Over Cutoff",
+    color = "Chemical in\nreference\nclass",
+    shape = "Passed\nbioactivity\nthresholds",
+    title = ""
   ) +
   theme_bw() +
   theme(legend.direction = "vertical")
@@ -431,8 +437,7 @@ steps:
 
 # set.seed()
 calcRandomizationTest <- function(
-  cr_refchems, bioactive_only = FALSE, downsample = FALSE
-) {
+    cr_refchems, bioactive_only = FALSE, downsample = FALSE) {
   set.seed(NULL)
   # initialize storage objects
   p.randomtest <- c()
@@ -441,84 +446,84 @@ calcRandomizationTest <- function(
 
   # if bioactive_only flag, filter httr data to bioactive signatures only
   if (bioactive_only) {
-      cr_refchems <-  filter(cr_refchems, pass_bioactivity)
+    cr_refchems <- filter(cr_refchems, pass_bioactivity)
   }
 
   for (sig in unique(cr_refchems$source_signature[!grepl("Random", cr_refchems$signature)])) {
-      celltype = gsub("_.*", "", sig)
-      # get in-class/out-of-class chems for rcas
-      chems.inclass <- cr_refchems %>%
-          filter(source_signature == sig & in_class) %>%
-          pull(dtxsid) %>%
-          unique()
-      chems.outofclass <- cr_refchems %>%
-          filter(source_signature == sig & !in_class) %>%
-          pull(dtxsid)
-      if (downsample) {
-          chems.outofclass <- sample(chems.outofclass, length(chems.inclass) * 3)
-      }
-      # calculate difference in means for rcas bmds
-      mean.inclass <- cr_refchems %>%
-          filter(source_signature == sig & in_class) %>%
-          pull(bmd_log) %>%
-          mean()
-      mean.outofclass <- cr_refchems %>%
-          filter(source_signature == sig & !in_class) %>%
-          pull(bmd_log) %>%
-          mean()
-      mean.difference.refsig <- mean.inclass - mean.outofclass
+    celltype <- gsub("_.*", "", sig)
+    # get in-class/out-of-class chems for rcas
+    chems.inclass <- cr_refchems %>%
+      filter(source_signature == sig & in_class) %>%
+      pull(dtxsid) %>%
+      unique()
+    chems.outofclass <- cr_refchems %>%
+      filter(source_signature == sig & !in_class) %>%
+      pull(dtxsid)
+    if (downsample) {
+      chems.outofclass <- sample(chems.outofclass, length(chems.inclass) * 3)
+    }
+    # calculate difference in means for rcas bmds
+    mean.inclass <- cr_refchems %>%
+      filter(source_signature == sig & in_class) %>%
+      pull(bmd_log) %>%
+      mean()
+    mean.outofclass <- cr_refchems %>%
+      filter(source_signature == sig & !in_class) %>%
+      pull(bmd_log) %>%
+      mean()
+    mean.difference.refsig <- mean.inclass - mean.outofclass
 
-      # calculate differences in means for random signature bmds
-      mean.inclass <- cr_refchems %>%
-          filter(
-              grepl("Random", signature) &
-              dtxsid %in% chems.inclass &
-              source == celltype
-          ) %>%
-          group_by(signature) %>%
-          summarise(mean_bmd = mean(bmd_log)) %>%
-          pull(mean_bmd)
-      mean.outofclass <- cr_refchems %>%
-          filter(
-              grepl("Random", signature) &
-              dtxsid %in% chems.outofclass &
-              source == celltype
-          ) %>%
-          group_by(signature) %>%
-          summarise(mean_bmd = mean(bmd_log)) %>%
-          pull(mean_bmd)
-      mean.difference.random <- mean.inclass - mean.outofclass
-      # calculate probability that rcas difference in means exceeds
-      # random sig difference in means
-      exceed.count <- length(mean.difference.refsig[
-          abs(mean.difference.random) >= abs(mean.difference.refsig)
-      ])
-      p.random <- exceed.count / length(mean.difference.random)
-      p.randomtest[[sig]] <- p.random
+    # calculate differences in means for random signature bmds
+    mean.inclass <- cr_refchems %>%
+      filter(
+        grepl("Random", signature) &
+          dtxsid %in% chems.inclass &
+          source == celltype
+      ) %>%
+      group_by(signature) %>%
+      summarise(mean_bmd = mean(bmd_log)) %>%
+      pull(mean_bmd)
+    mean.outofclass <- cr_refchems %>%
+      filter(
+        grepl("Random", signature) &
+          dtxsid %in% chems.outofclass &
+          source == celltype
+      ) %>%
+      group_by(signature) %>%
+      summarise(mean_bmd = mean(bmd_log)) %>%
+      pull(mean_bmd)
+    mean.difference.random <- mean.inclass - mean.outofclass
+    # calculate probability that rcas difference in means exceeds
+    # random sig difference in means
+    exceed.count <- length(mean.difference.refsig[
+      abs(mean.difference.random) >= abs(mean.difference.refsig)
+    ])
+    p.random <- exceed.count / length(mean.difference.random)
+    p.randomtest[[sig]] <- p.random
 
-      # save data to dataframes for visualization
-      df.randomtest <- rbind(
-          df.randomtest,
-          data.frame(
-            source_signature = sig,
-            mean_diff = mean.difference.random
-          )
+    # save data to dataframes for visualization
+    df.randomtest <- rbind(
+      df.randomtest,
+      data.frame(
+        source_signature = sig,
+        mean_diff = mean.difference.random
       )
-      df.sigtest <- rbind(
-          df.sigtest,
-          data.frame(
-            source_signature = sig,
-            mean_diff = mean.difference.refsig,
-            pval = p.random
-          )
+    )
+    df.sigtest <- rbind(
+      df.sigtest,
+      data.frame(
+        source_signature = sig,
+        mean_diff = mean.difference.refsig,
+        pval = p.random
       )
+    )
   }
   return(
-      list(
-          random = df.randomtest,
-          rcas = df.sigtest,
-          pval = p.randomtest
-      )
+    list(
+      random = df.randomtest,
+      rcas = df.sigtest,
+      pval = p.randomtest
+    )
   )
 }
 randomtest <- calcRandomizationTest(cr_refchems, downsample = TRUE)
@@ -534,20 +539,20 @@ randomtest$rcas <- randomtest$rcas %>%
 # distributions
 plot_randomtest <- ggplot() +
   geom_histogram(
-      data = randomtest$random,
-      aes(mean_diff), binwidth = 0.1
+    data = randomtest$random,
+    aes(mean_diff), binwidth = 0.1
   ) +
   geom_vline(
-      data = randomtest$rcas, aes(xintercept = mean_diff),
-      linetype = "dashed", color = "#f03406ef"
+    data = randomtest$rcas, aes(xintercept = mean_diff),
+    linetype = "dashed", color = "#f03406ef"
   ) +
   geom_text(
     data = randomtest$rcas, aes(x = -3.5, y = 40, label = pval_label),
   ) +
   facet_wrap(~source_signature) +
   labs(
-      x = "Mean in-class log10(BMD) -\nMean out-of-class log10(BMD)",
-      y = "Frequency of Random Signatures"
+    x = "Mean in-class log10(BMD) -\nMean out-of-class log10(BMD)",
+    y = "Frequency of Random Signatures"
   ) +
   theme_bw()
 plot_randomtest
@@ -555,20 +560,20 @@ plot_randomtest
 # bootstrap randomization test 100x for downsampling
 df.randomp <- data.frame()
 for (idx in 1:100) {
-    randomtest <- calcRandomizationTest(cr_refchems, downsample = TRUE)
-    df.p <- as.data.frame(randomtest$pval)
-    colnames(df.p) <- "pval"
-    df.p$idx <- idx
-    df.p$signature <- rownames(df.p)
-    rownames(df.p) <- NULL
-    df.randomp <- rbind(df.randomp, df.p)
+  randomtest <- calcRandomizationTest(cr_refchems, downsample = TRUE)
+  df.p <- as.data.frame(randomtest$pval)
+  colnames(df.p) <- "pval"
+  df.p$idx <- idx
+  df.p$signature <- rownames(df.p)
+  rownames(df.p) <- NULL
+  df.randomp <- rbind(df.randomp, df.p)
 }
 df.randomp %>%
-    group_by(signature) %>%
-    summarise(
-      across(pval, list(min = min, mean = mean, median = median, max = max))
-    ) %>%
-    DT::datatable()
+  group_by(signature) %>%
+  summarise(
+    across(pval, list(min = min, mean = mean, median = median, max = max))
+  ) %>%
+  DT::datatable()
 ```
 
 # Reproducibility

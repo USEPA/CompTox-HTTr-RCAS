@@ -1,0 +1,82 @@
+---
+title: "Tiered Framework Assessment for Chemical Prioritization"
+author: "Jesse Rogers"
+date: "December 15, 2023"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: show
+---
+
+Assessment of current chemical screening data using a tiered NAM-based
+framework to prioritize chemicals that perturb key molecular targets.
+
+Chemicals are screened in Tier 1 using
+[Reference Class Associated Signatures(RCAS)](analysis_RCAS.Rmd),
+initially for bioactivity (Tier 1-Positive) and additionally for selectivity
+versus non-targeted transcriptional responses (Tier 1-Selective). Chemicals
+with sufficient evidence of targeted behavior in Tier 1 are advanced
+to confirmatory Tier 2 assays from the
+[US EPA ToxCast program](https://www.epa.gov/chemical-research/exploring-toxcast-data)
+using bioactivity and selectivity criteria.
+
+![](Fig2A.png)
+
+This framework was applied to 1,201 chemicals screened using high-throughtput
+transcriptomics (HTTr). Chemicals with existing, orthogonal assay data in
+ToxCast were used for retrospective evaluation of the framework's performance,
+and a subset of chemicals with no orthogonal data were tested in a series of
+targeted assays as a prospective screen of data-poor chemicals.
+
+# Setup Environment
+
+```{r env-setup, message=FALSE}
+# import packages for visualization
+# (note that other required packages will be imported by R scripts)
+library(ggplot2)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+library(ggsankey)
+library(ggupset)
+
+# set directories (`dir_home` should be set to the top-level directory)
+dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
+dir_scripts <- paste0(dir_home, "scripts/")
+setwd(dir_home)
+
+# import scripts/data for RCAS profiling and framework assessment
+source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
+source(paste0(dir_scripts, "pipeline_framework.R"))
+
+path_rcas <- c(
+  paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+)
+path_results <- paste0(dir_home, "data/examples/framework_results.RData")
+```
+
+# Generate Framework Results
+
+Using previous HTTr (Tier 1) and ToxCast (Tier 2) targeted potency estimates,
+the framework above is used to evaluate 1,201 chemicals screened in HTTr across
+HepaRG and U-2 OS cell lines. 
+
+Currently, `runFramework()` imports ToxCast from InvitroDB using an internal 
+MySQL database and is only available internally. However, this
+method can be altered to work with a local instance of InvitroDB, 
+[available for public download here](https://www.epa.gov/chemical-research/exploring-toxcast-data).
+
+```{r generate-framework, eval=FALSE}
+
+```
+
+# Reproducibility
+
+```{r reproducibility}
+sessionInfo()
+```

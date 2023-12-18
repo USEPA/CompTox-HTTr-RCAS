@@ -148,6 +148,12 @@ runFramework <- function(
     # condense table to chemicals x rcas
     compare_sum <- compare_full %>%
         group_by(dtxsid, signature) %>%
+        mutate(
+            n_toxcast_meas = case_when(
+                is.na(n_toxcast_meas) ~ 0, TRUE ~ n_toxcast_meas
+            ),
+            chnm = case_when(is.na(chnm) ~ name, TRUE ~ chnm)
+        ) %>%
         summarise(
             across(
                 c(

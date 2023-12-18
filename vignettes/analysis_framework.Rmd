@@ -154,6 +154,35 @@ for (idx in seq_len(length(path_cr))) {
 }
 ```
 
+Here, framework results are pre-generated and saved in the `data/examples` 
+directory.
+
+```{r import-framework}
+# load results for heparg/u2os cell lines + combine
+path_export <- paste0(
+  dir_home,
+  c(
+    "data/examples/framework_heparg.RData",
+    "data/examples/framework_u2os.RData"
+  )
+)
+load(path_export[1])
+heparg_full <- compare_full
+heparg_sum <- compare_sum
+load(path_export[2])
+u2os_full <- compare_full
+u2os_sum <- compare_sum
+
+combined_full <- rbind(
+  mutate(heparg_full, source = "heparg"),
+  mutate(u2os_full, source = "u2os")
+)
+combined_sum <- rbind(
+  mutate(heparg_sum, source = "heparg"),
+  mutate(u2os_sum, source = "u2os")
+)
+```
+
 # Reproducibility
 
 ```{r reproducibility}

@@ -180,7 +180,8 @@ combined_full <- rbind(
 combined_sum <- rbind(
   mutate(heparg_sum, source = "heparg"),
   mutate(u2os_sum, source = "u2os")
-)
+) %>%
+  mutate(source_signature = paste0(source, "_", signature))
 ```
 
 # Analyze Framework Results
@@ -193,7 +194,6 @@ compared across molecular targets/cell lines.
 ```{r attrition-process}
 # de-duplicate inactive signatures for dtxsids
 combined_attr <- combined_sum %>%
-  mutate(source_signature = paste0(source, "_", signature)) %>%
   group_by(dtxsid) %>%
   mutate(
     multi_positive = sum(tier1_positive) > 0,
@@ -338,6 +338,127 @@ plot_attr <- combined_attr %>%
   guides(color = "none", fill = guide_legend(reverse = TRUE))
 
 plot_attr
+```
+
+## Evaluate Tier 1 Performance: Association Tests
+
+As an initial test for how well Tier 1 outcomes are associated
+with targeted assay results, Fisher's exact tests are used to 
+determine whether a positive outcome from each RCAS is assocaiated 
+with a positive outcome from at least one orthogonal ToxCast endpoint.
+
+```{r test-outcome-association}
+# run exact tests on all rcas
+calcFisher <- function(df, col_x, col_y, fisher = TRUE, simulate.p.values = FALSE) {
+  contingency <- table(df[[col_x]], df[[col_y]], dnn = c(col_x, col_y))
+  if (!any(dim(contingency) == 0)) {
+    assoc <- chisq.test(contingency, simulate.p.value = simulate.p.values)
+    assoc_export <- broom::tidy(assoc)
+    if (fisher) {
+      assoc_export$fisher.p.value <- fisher.test(contingency)$p.value
+    } else {
+      assoc_export$fisher.p.value <- NA
+    }
+    return(list(test = assoc_export, tbls = broom::augment(assoc)))
+  } else {
+    return(data.frame())
+  }
+}
+calcOdds <- function(df, col_x, col_y) {
+  contingency <- table(df[[col_x]], df[[col_y]], dnn = c(col_x, col_y))
+  if (!any(dim(contingency) == 0)) {
+    fisher <- fisher.test(contingency)
+    fisher_export <- broom::tidy(fisher)
+    return(fisher_export)
+  } else {
+    return(data.frame())
+  }
+}
+```
+
+```{r visualize-outcome-associations, warning=FALSE, fig.width=8, fig.height=4}
+# test associations and calculate odds ratios for all rcas but hERG_Inhibitor
+  # (no Tier 2 multi-concentration bioactivity estimates available)
+assoc_positive <- list(test = data.frame(), tbls = data.frame())
+or_positive <- data.frame()
+for (sig in unique(combined_sum$source_signature)) {
+  assoc <- combined_sum %>%
+    filter(source_signature == sig) %>%
+    distinct(dtxsid, tier2_positive, .keep_all = TRUE) %>%
+    calcFisher(., "tier1_positive", "tier2_positive")
+  or <- combined_sum %>%
+    filter(source_signature == sig) %>%
+    distinct(dtxsid, tier2_positive, .keep_all = TRUE) %>%
+    calcOdds(., "tier1_positive", "tier2_positive")
+  if (sig != "heparg_hERG_Inhibitor") {
+    assoc_positive$test <- rbind(assoc_positive$test, cbind(assoc$test, source_signature = sig))
+    assoc_positive$tbls <- rbind(assoc_positive$tbls, cbind(assoc$tbls, source_signature = sig))
+    or_positive <- rbind(or_positive, cbind(or, source_signature = sig))
+  }
+}
+
+# visualize odds ratios
+plot_or <- or_positive %>%
+  ggplot() +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+  geom_errorbar(
+    aes(y = source_signature, xmin = conf.low, xmax = conf.high),
+    width = 0.1
+  ) +
+  geom_point(aes(estimate, source_signature), color = "red", size = 2) +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev) +
+  labs(x = "Odds ratio (95% CI, log scale)", y = "RCAS", title = " ") +
+  theme_bw()
+
+# combine plot with exact test p-values
+plot_pval <- or_positive %>%
+  mutate(p.value = signif(p.value, digits = 2), siglabel = as.factor(1:4)) %>%
+  ggplot(aes(x = as.factor(1), y = siglabel, label = p.value)) +
+  geom_text() +
+  scale_y_discrete(limits = rev) +
+  labs(y = NULL, x = " ") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(color = "white"),
+    axis.line = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.background = element_blank()
+    # plot.margin = unit(c(5.5, 0, 5.5, 0), "pt")
+  ) +
+  ggtitle("p-value")
+
+plot_or_all <- cowplot::plot_grid(
+  plot_or, plot_pval, nrow = 1, rel_widths = c(1, 0.2)
+)
+plot_or_all
+```
+
+```{r plot-fig2}
+# combine panels for Figure 2
+fmwk <- png::readPNG(paste0(dir_home, "vignettes/Fig2A.png"))
+fmwk_grob <- grid::rasterGrob(fmwk)
+
+plot_fig2 <- cowplot::plot_grid(
+  fmwk_grob,
+  plot_attr,
+  cowplot::plot_grid(
+    NULL, plot_or, plot_pval, NULL,
+    nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
+  ),
+  nrow = 3, rel_heights = c(1, 1.2, 0.8), labels = c("A", "B", "C")
+)
+ggsave(
+  paste0(dir_home, "output/Fig2.png"), plot_fig2,
+  width = 1100, height = 1400, units = "px", scale = 2, bg = "white"
+)
 ```
 
 # Reproducibility

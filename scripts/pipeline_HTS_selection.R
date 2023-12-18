@@ -448,7 +448,8 @@ filterForTarget <- function(mc5_refchems, ace, class_name) {
             aeid %in% ace_all$aeid &
             !grepl("CEETOX", aenm) &
             !grepl("ATG_(.+)_TRANS_dn", aenm) &
-            !grepl("NVS_ADME", aenm)
+            !grepl("NVS_ADME", aenm) &
+            !grepl("ERF", aenm)
         )
     return(mc5_refs)
 }

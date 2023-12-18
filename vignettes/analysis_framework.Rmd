@@ -48,6 +48,7 @@ library(RColorBrewer)
 library(circlize)
 library(ggsankey)
 library(ggupset)
+library(ggsignif)
 
 # set directories (`dir_home` should be set to the top-level directory)
 dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
@@ -466,6 +467,165 @@ ggsave(
   paste0(dir_home, "output/Fig2.png"), plot_fig2,
   width = 1100, height = 1400, units = "px", scale = 2, bg = "white"
 )
+```
+
+## Evaluate Tier 1 Sensitivity: Mismatching Outcomes
+
+In order to examine the extent to which Tier 1 targeted assessments fail to 
+prioritize targeted perturbagens, Tier 2 potency estimates for chemicals with a
+negative Tier 1 outcome and a positive or selective Tier 2 outcome are compared
+to those with a positive or selective Tier 1 outcome via Kruskal-Wallis tests.
+
+```{r test-mismatch-outcome}
+# test for effect of tier 1 outcome on tier 2-positive/selective chemicals
+mismatch_test <- combined_sum %>%
+  filter(tier2_positive & n_toxcast_meas >= 2) %>%
+  group_by(source_signature, tier2_selective) %>%
+  mutate(n_groups = length(unique(outcome_tier1))) %>%
+  filter(n_groups > 1) %>%
+  nest() %>%
+  mutate(
+    kw = purrr::map(data, ~ kruskal.test(.x$modl_acc ~ .x$outcome_tier1)),
+    kw_df = purrr::map(kw, broom::tidy)
+  ) %>%
+  unnest(kw_df) %>%
+  ungroup() %>%
+  mutate(fdr = p.adjust(p.value, method = "fdr"))
+
+mismatch_test %>%
+  select(-c(data, kw)) %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 2))) %>%
+  DT::datatable()
+```
+
+```{r test-mismatch-contrasts}
+# test individual contrasts via Wilcoxon rank sum tests
+mismatch_contr <- combined_sum %>%
+  filter(tier2_positive & n_toxcast_meas >= 2) %>%
+  group_by(source_signature, tier2_selective) %>%
+  mutate(n_groups = length(unique(outcome_tier1))) %>%
+  filter(n_groups > 1) %>%
+  nest() %>%
+  mutate(
+    rs = purrr::map(
+      data, ~ pairwise.wilcox.test(
+        .x$modl_acc, .x$outcome_tier1,  p.adjust.method = "BH"
+      )
+    ),
+    rs_df = purrr::map(rs, broom::tidy)
+  ) %>%
+  unnest(rs_df) %>%
+  ungroup()
+
+# visualize differences in potency across tier 2-selective only chemicals
+contr_pos <- mismatch_contr %>%
+  filter(!tier2_selective & group2 == "negative") %>%
+  arrange(source_signature, group1) %>%
+  mutate(p_label = case_when(
+    p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
+    TRUE ~ as.character(signif(p.value, 2))
+  )) %>%
+  pull(p_label)
+
+tier2_lim <- c(-2.5, 4)
+plot_mismatch_pos <- combined_sum %>%
+  filter(
+    source_signature != "heparg_hERG_Inhibitor" &
+      tier2_positive &
+      !tier2_selective
+  ) %>%
+  ggplot(aes(modl_acc, source_signature, color = outcome_tier1)) +
+  geom_boxplot(na.rm = TRUE, outlier.shape = NA) +
+  geom_point(
+    na.rm = TRUE, size = 1, alpha = 0.5,
+    position = position_jitterdodge(jitter.width = 0.1)
+  ) +
+  geom_signif(
+    # y_position = c(3, 3.6, 3, 3.6, 3, 3.6),
+    y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 3.4),
+    xmin = c(0.7, 0.7, 1.7, 1.7, 3.7, 3.7),
+    xmax = c(1, 1.3, 2, 2.3, 4, 4.3),
+    annotation = contr_pos,
+    tip_length = 0.01,
+    color = "grey30",
+    textsize = 3,
+    family = "Helvetica"
+  ) +
+  scale_x_continuous(limits = tier2_lim) +
+  labs(
+    x = expression(log[10](POD[Tier~2])), y = "RCAS", color = "Tier 1 Outcome",
+    title = "Tier 2 Positive Only"
+  ) +
+  theme_bw() +
+  th +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
+
+
+# repeat for tier 2-selective chemicals
+contr_sel <- mismatch_contr %>%
+  filter(tier2_selective & group2 == "negative") %>%
+  arrange(source_signature, group1) %>%
+  mutate(p_label = case_when(
+    p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
+    TRUE ~ as.character(signif(p.value, 2))
+  )) %>%
+  pull(p_label)
+
+plot_mismatch_sel <- combined_sum %>%
+  filter(
+    source_signature != "heparg_hERG_Inhibitor" &
+      tier2_positive &
+      tier2_selective
+  ) %>%
+  ggplot(aes(modl_acc, source_signature, color = outcome_tier1)) +
+  geom_boxplot(na.rm = TRUE, outlier.shape = NA) +
+  geom_point(
+    na.rm = TRUE, size = 1, alpha = 0.5,
+    position = position_jitterdodge(jitter.width = 0.1)
+  ) +
+  geom_signif(
+    # y_position = c(3, 3.6, 3, 3.6, 3, 3, 3.6),
+    y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 2.8, 3.4),
+    xmin = c(0.7, 0.7, 1.7, 1.7, 2.8, 3.7, 3.7),
+    xmax = c(1, 1.3, 2, 2.3, 3.2, 4, 4.3),
+    annotation = contr_sel,
+    tip_length = 0.01,
+    color = "grey30",
+    textsize = 3,
+    family = "Helvetica"
+  ) +
+  scale_x_continuous(limits = tier2_lim) +
+  labs(
+    x = expression(log[10](POD[Tier~2])), y = "RCAS", color = "Tier 1 Outcome",
+    title = "Tier 2 Positive + Selective"
+  ) +
+  theme_bw() +
+  th +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
+
+plot_mismatch_all <- cowplot::plot_grid(
+  cowplot::plot_grid(
+    plot_mismatch_pos + theme(legend.position = "none"),
+    plot_mismatch_sel + theme(
+      axis.text.y = element_blank(),
+      axis.title.y = element_blank(),
+      legend.position = "none"
+    ),
+    labels = c("A", "B"),
+    label_fontfamily = "Helvetica",
+    rel_widths = c(1, 0.65)
+  ),
+  cowplot::plot_grid(
+    NULL, cowplot::get_legend(plot_mismatch_sel), rel_widths = c(0.2, 1)
+  ),
+  nrow = 2, rel_heights = c(1, 0.2)
+)
+
+ggsave(
+  paste0(dir_home, "output/Fig3.png"), plot_mismatch_all,
+  width = 1200, height = 720, units = "px", scale = 2, bg = "white"
+)
+plot_mismatch_all
 ```
 
 # Reproducibility

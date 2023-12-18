@@ -343,6 +343,9 @@ combineTier1 <- function(cr_rcas, cr_burst_rcas) {
                 TRUE ~ 2.5
             )
         ) %>%
+        group_by(dtxsid, signature) %>%
+        slice_min(bmd_log, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
         left_join(
             ., select(
                 cr_burst_rcas,

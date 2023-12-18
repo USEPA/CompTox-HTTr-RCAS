@@ -123,7 +123,8 @@ runFramework <- function(
     compare_tier1 <- combineTier1(cr_rcas, cr_burst_rcas)
     compare_tier1 <- mutate(
         compare_tier1,
-        signature_label = gsub("^(.+?)_", "", gsub("_up|_dn", "", signature))
+        # signature_label = gsub("^(.+?)_", "", gsub("_up|_dn", "", signature))
+        signature_label = gsub("_up|_dn", "", signature)
     )
     compare_tier2 <- combineTier2(chems_match_rcas, mc5_burst_rcas)
     compare_full <- compare_tier1 %>%

@@ -381,7 +381,7 @@ calcOdds <- function(df, col_x, col_y) {
 }
 ```
 
-```{r visualize-outcome-associations, warning=FALSE, fig.width=8, fig.height=4}
+```{r visualize-outcome-associations, warning=FALSE, fig.width=6, fig.height=3}
 # test associations and calculate odds ratios for all rcas but hERG_Inhibitor
   # (no Tier 2 multi-concentration bioactivity estimates available)
 assoc_positive <- list(test = data.frame(), tbls = data.frame())
@@ -448,6 +448,8 @@ plot_or_all <- cowplot::plot_grid(
 plot_or_all
 ```
 
+Full figure (Fig. 2):
+
 ```{r plot-fig2, class.source = 'fold-hide'}
 # combine panels for Figure 2
 fmwk <- png::readPNG(paste0(dir_home, "vignettes/Fig2A.png"))
@@ -495,10 +497,11 @@ mismatch_test <- combined_sum %>%
 mismatch_test %>%
   select(-c(data, kw)) %>%
   mutate(across(where(is.numeric), ~ signif(.x, 2))) %>%
+  rename(rcas = source_signature) %>%
   DT::datatable()
 ```
 
-```{r test-mismatch-contrasts}
+```{r test-mismatch-contrasts, fig.width=6, fig.height=3.4}
 # test individual contrasts via Wilcoxon rank sum tests
 mismatch_contr <- combined_sum %>%
   filter(tier2_positive & n_toxcast_meas >= 2) %>%
@@ -626,6 +629,235 @@ ggsave(
   width = 1200, height = 720, units = "px", scale = 2, bg = "white"
 )
 plot_mismatch_all
+```
+
+## Compare Tier 1 POD Sensitivity
+
+In order to examine whether RCAS-derived PODs are health-protective compared to
+previous PODs derived from transcriptomics and targeted screening data, RCAS-
+derived BMDs are compared to 5th percentile overall HTTr BMDs (aka Biological
+Phenotype Altering Concentrations, BPACs)($POD_{BPAC}$) and ToxCast orthogonal
+BMDs ($POD_{Tier 2}$).
+
+```{r pod-correlation}
+# calculate correlation between RCAS BMDs and HTTr BPACs
+calcCor <- function(combined_sum, col_compare, tier2 = FALSE) {
+  if (tier2) {
+    combined_filt <- combined_sum %>%
+      filter(
+        n_toxcast_meas >= 2 &
+        outcome_tier1 == "selective" &
+        outcome_tier2 != "negative"
+      ) %>%
+      group_by(source_signature, outcome_tier2)
+  } else {
+    combined_filt <- combined_sum %>%
+      filter(outcome_tier1 != "negative") %>%
+      group_by(source_signature, outcome_tier1)
+  }
+  cor_rcas <- combined_filt %>%
+    distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
+    mutate(bmd_compare = !!as.name(col_compare)) %>%
+    select(dtxsid, bmd_log, bmd_compare) %>%
+    filter(!is.na(bmd_compare) & is.finite(bmd_compare)) %>%
+    nest() %>%
+    mutate(n_chems = unlist(purrr::map(data, nrow))) %>%
+    filter(n_chems >= 3) %>%
+    mutate(
+      cor_obj = purrr::map(data, ~ cor.test(.x$bmd_log, .x$bmd_compare)),
+      cor_df = purrr::map(cor_obj, broom::tidy)
+    ) %>%
+    unnest(cor_df) %>%
+    mutate(
+      cor_label = case_when(
+        p.value <= 0.05 ~ paste0("r = ", round(estimate, 2), "*"),
+        TRUE ~ paste0("r = ", round(estimate, 2))
+      )
+    ) %>%
+    select(-data, -cor_obj)
+  if (tier2) {
+    cor_rcas <- mutate(
+      cor_rcas,
+      outcome_label = case_when(
+        outcome_tier2 == "selective" ~ "Positive + Selective",
+        TRUE ~ "Positive Only"
+      )
+    )
+  } else {
+    cor_rcas <- mutate(
+      cor_rcas,
+      outcome_label = case_when(
+        outcome_tier1 == "selective" ~ "Positive + Selective",
+        TRUE ~ "Positive Only"
+      )
+    )
+  }
+  return(cor_rcas)
+}
+
+cor_bpac <- calcCor(combined_sum, "bmd_log_5")
+cor_bpac %>%
+  select(-c(n_chems, alternative, cor_label, outcome_label)) %>%
+  mutate(across(where(is.numeric), ~signif(.x, 2))) %>%
+  DT::datatable()
+
+cor_tier2 <- calcCor(combined_sum, "modl_acc", tier2 = TRUE)
+cor_tier2 %>%
+  select(-c(n_chems, alternative, cor_label, outcome_label)) %>%
+  mutate(across(where(is.numeric), ~signif(.x, 2))) %>%
+  DT::datatable()
+```
+
+```{r pod-comparison}
+# plot RCAS BMDs against HTTr BPACs/Tier 2 PODs
+plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 = FALSE) {
+  if (tier2) {
+    combined_filt <- filter(
+      combined_sum,
+      n_toxcast_meas >= 2 &
+      outcome_tier1 == "selective" &
+      outcome_tier2 != "negative"
+    ) %>%
+      mutate(
+        outcome_label = case_when(
+          outcome_tier2 == "selective" ~ "Positive + Selective",
+          TRUE ~ "Positive Only"
+        )
+      )
+  } else {
+    combined_filt <- filter(combined_sum, outcome_tier1 != "negative") %>%
+      mutate(
+        outcome_label = case_when(
+          outcome_tier1 == "selective" ~ "Positive + Selective",
+          TRUE ~ "Positive Only"
+        )
+      )
+  }
+  plot_pod <- combined_filt %>%
+    distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
+    ggplot(aes(bmd_log, !!as.name(col_compare), color = outcome_label)) +
+    geom_point(na.rm = TRUE, alpha = 0.7) +
+    geom_abline(
+      slope = 1, intercept = c(-0.5, 0.5),
+      linetype = "dashed", color = "grey50"
+    ) +
+    geom_abline(slope = 1, intercept = 0, color = "grey50") +
+    geom_text(
+      data = filter(cor_rcas, outcome_label == "Positive Only"),
+      aes(label = cor_label),
+      x = -1.8, y = 2.5, show.legend = FALSE
+    ) +
+    geom_text(
+      data = filter(cor_rcas, outcome_label == "Positive + Selective"),
+      aes(label = cor_label),
+      x = -1.8, y = 1.8, show.legend = FALSE
+    ) +
+    facet_wrap(~source_signature, nrow = 1) +
+    labs(
+      x = bquote(log[10](POD[RCAS])),
+      y = bquote(log[10](POD[.(label_compare)]))
+    ) +
+    scale_color_manual(values = scales::hue_pal()(3)[c(3, 2)]) +
+    scale_x_continuous(limits = c(-3, 3)) +
+    scale_y_continuous(limits = c(-3, 3)) +
+    theme_bw() +
+    th +
+    theme(legend.position = "bottom") +
+    guides(label = "none")
+
+  if (tier2) {
+    plot_pod <- plot_pod + labs(color = "Tier 2 Outcome")
+  } else {
+    plot_pod <- plot_pod + labs(color = "Tier 1 Outcome")
+  }
+  return(plot_pod)
+}
+
+plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC")
+plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "Tier 2", tier2 = TRUE)
+
+# combine plots
+guide_or <- guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
+plot_pod_all <- cowplot::plot_grid(
+  plot_bpac + guide_or,
+  plot_tier2 + guide_or,
+  align = "v", axis = "lrtb",
+  nrow = 2, labels = c("A", "B"), label_fontfamily = "Helvetica"
+)
+ggsave(
+  paste0(dir_home, "output/Fig4.png"), plot_pod_all,
+  width = 1400, height = 1100, units = "px", bg = "white", scale = 2
+)
+
+plot_pod_all
+```
+
+```{r pod-comparison-bpac}
+# calculate correlation between RCAS BMDs and HTTr BPACs
+cor_bpac <- combined_sum %>%
+  filter(outcome_tier1 != "negative") %>%
+  distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
+  group_by(source_signature, outcome_tier1) %>%
+  select(dtxsid, bmd_log, bmd_log_5) %>%
+  nest() %>%
+  mutate(n_chems = unlist(purrr::map(data, nrow))) %>%
+  filter(n_chems >= 3) %>%
+  mutate(
+    cor_obj = purrr::map(data, ~ cor.test(.x$bmd_log, .x$bmd_log_5)),
+    cor_df = purrr::map(cor_obj, broom::tidy)
+  ) %>%
+  unnest(cor_df) %>%
+  mutate(
+    cor_label = case_when(
+      p.value <= 0.05 ~ paste0("r = ", round(estimate, 2), "*"),
+      TRUE ~ paste0("r = ", round(estimate, 2))
+    ),
+    tier1_label = case_when(
+      outcome_tier1 == "selective" ~ "Positive + Selective",
+      TRUE ~ "Positive Only"
+    )
+  ) %>%
+  select(-data, -cor_obj)
+
+# plot RCAS BMDs against HTTr BPACs
+plot_bpac <- combined_sum %>%
+  filter(outcome_tier1 != "negative") %>%
+  distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
+  mutate(
+    tier1_label = case_when(
+      outcome_tier1 == "selective" ~ "Positive + Selective",
+      TRUE ~ "Positive Only"
+    )
+  ) %>%
+  ggplot(aes(bmd_log, bmd_log_5, color = tier1_label)) +
+  geom_point(na.rm = TRUE, alpha = 0.7) +
+  geom_abline(
+    slope = 1, intercept = c(-0.5, 0.5), linetype = "dashed", color = "grey50"
+  ) +
+  geom_abline(slope = 1, intercept = 0, color = "grey50") +
+  geom_text(
+    data = filter(cor_bpac, tier1_label == "Positive"),
+    aes(label = cor_label),
+    x = -1.8, y = 2.5, show.legend = FALSE
+  ) +
+  geom_text(
+    data = filter(cor_bpac, tier1_label == "Selective"),
+    aes(label = cor_label),
+    x = -1.8, y = 1.8, show.legend = FALSE
+  ) +
+  facet_wrap(~source_signature, nrow = 1) +
+  labs(
+    x = expression(log[10](POD[RCAS])),
+    y = expression(log[10](POD[BPAC])),
+    color = "Tier 1 Outcome"
+  ) +
+  scale_color_manual(values = scales::hue_pal()(3)[c(3, 2)]) +
+  scale_x_continuous(limits = c(-3, 3)) +
+  scale_y_continuous(limits = c(-3, 3)) +
+  theme_bw() +
+  th +
+  theme(legend.position = "bottom") +
+  guides(label = "none")
 ```
 
 # Reproducibility

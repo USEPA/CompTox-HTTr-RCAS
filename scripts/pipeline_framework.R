@@ -129,7 +129,7 @@ runFramework <- function(
     compare_tier2 <- combineTier2(chems_match_rcas, mc5_burst_rcas)
     compare_full <- compare_tier1 %>%
         select(
-            dtxsid, name, signature, signature_label, bmd_log, bmd_log_med,
+            dtxsid, name, signature, signature_label, bmd_log, bmd_log_5, bmd_log_med,
             bmd_log_mode, threshold_1sd, tier1_positive, tier1_selective_1sd
         ) %>%
         full_join(
@@ -157,7 +157,7 @@ runFramework <- function(
         summarise(
             across(
                 c(
-                    name, chnm, bmd_log, bmd_log_med, bmd_log_mode,
+                    name, chnm, bmd_log, bmd_log_5, bmd_log_med, bmd_log_mode,
                     threshold_1sd, tier1_positive, tier1_selective,
                     n_toxcast_meas
                 ),
@@ -355,12 +355,18 @@ combineTier1 <- function(cr_rcas, cr_burst_rcas) {
         left_join(
             ., select(
                 cr_burst_rcas,
-                dtxsid, specific_crit, bmd_log_med, bmd_log_mode, threshold_1sd
+                dtxsid,
+                specific_crit,
+                bmd_log_5,
+                bmd_log_med,
+                bmd_log_mode,
+                threshold_1sd
             ),
             by = "dtxsid"
         ) %>%
         mutate(
             specific_crit = case_when(is.na(specific_crit) ~ "n<10", TRUE ~ specific_crit),
+            bmd_log_5 = case_when(is.na(bmd_log_5) ~ 2.5, TRUE ~ bmd_log_5),
             bmd_log_med = case_when(is.na(bmd_log_med) ~ 2.5, TRUE ~ bmd_log_med),
             bmd_log_mode = case_when(is.na(bmd_log_mode) ~ 2.5, TRUE ~ bmd_log_mode),
             threshold_1sd = case_when(is.na(threshold_1sd) ~ 2, TRUE ~ threshold_1sd),

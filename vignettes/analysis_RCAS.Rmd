@@ -48,6 +48,8 @@ path_rcas <- c(
   paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
   paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
 )
+
+th <- theme(text = element_text(family = "Helvetica"))
 ```
 
 # Assign Reference Chemicals
@@ -215,11 +217,12 @@ plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
   )(length(unique(composite$class_1)))
   names(rcas.palette) <- unique(composite$class_1)
   # plot heatmap
+  title_label <- ifelse(title == "heparg", "HepaRG", "U-2 OS")
   rcas.ht <- Heatmap(
     rcas.mat,
     colorRamp2(c(-2.5, -1.25, 0, 1.25, 2.5), rev(brewer.pal(5, "Spectral"))),
     name = paste0("log10(BMD)"),
-    column_title = paste0("RCAS-identified genes: ", gsub("_", " ", title)),
+    column_title = paste0("RCAS-Identified Genes: ", title_label),
     column_title_gp = gpar(fontsize = 8),
     row_title = "Reference Chemical",
     row_title_gp = gpar(fontsize = 8),
@@ -230,14 +233,14 @@ plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
       annotation_legend_param = list(
         reference_class = list(direction = "horizontal", nrow = 2)
       ),
-      annotation_width = unit(0.2, "cm")
+      simple_anno_size = unit(0.3, "cm")
     ),
     top_annotation = HeatmapAnnotation(
       variable_class = rcas.varclass,
       col = list(variable_class = rcas.palette),
       show_annotation_name = FALSE,
       show_legend = FALSE,
-      annotation_height = unit(0.2, "cm")
+      simple_anno_size = unit(0.3, "cm")
     ),
     row_split = rcas.classes,
     column_labels = rep("", ncol(rcas.mat)),
@@ -263,11 +266,11 @@ for (idx in seq_len(length(rename_dtxsids))) {
 }
 # plot heatmaps
 ht_heparg <- plotHeatmap(
-  composite_heparg, "heparg", composite_all, width = 6, height = 6
+  composite_heparg, "heparg", composite_all, width = 3.6, height = 3.4
 )
 draw(ht_heparg, merge_legend = TRUE, heatmap_legend_side = "bottom")
 ht_u2os <- plotHeatmap(
-  composite_u2os, "u2os", composite_all, width = 6, height = 4.8
+  composite_u2os, "u2os", composite_all, width = 3.6, height = 3
 )
 draw(ht_u2os, merge_legend = TRUE, heatmap_legend_side = "bottom")
 ```
@@ -389,7 +392,7 @@ plot_pot_eff <- cr_refchems %>%
     shape = pass_bioactivity,
     label = stringr::str_trunc(name, 30)
   )) +
-  geom_point(alpha = 0.9) +
+  geom_point(alpha = 0.8, size = 1.5) +
   geom_hline(yintercept = 0, color = "grey50") +
   geom_hline(
     yintercept = c(-1.5, 1.5),
@@ -400,14 +403,104 @@ plot_pot_eff <- cr_refchems %>%
   facet_wrap(~source_signature) +
   labs(
     x = "log10(BMD)", y = "Signed Top Over Cutoff",
-    color = "Chemical in\nreference\nclass",
-    shape = "Passed\nbioactivity\nthresholds",
+    color = "Chemical in\nReference\nClass",
+    shape = "Passed\nBioactivity\nThresholds",
     title = ""
   ) +
   theme_bw() +
+  th +
   theme(legend.direction = "vertical")
 
 plot_pot_eff
+```
+
+```{r plot-figure, class.source = 'fold-hide'}
+# import rcas schematic
+sch_rcas <- png::readPNG(paste0(dir_home, "vignettes/Fig1A.png"))
+sch_rcas_grob <- rasterGrob(sch_rcas)
+
+# generated combined legends for heatmaps
+rcas_palette <- colorRampPalette(
+  brewer.pal(8, "Set2")
+)(length(unique(composite_all$class_1)))
+names(rcas_palette) <- unique(composite_all$class_1)
+lgd_ref <- Legend(
+  at = names(rcas_palette),
+  title = "Molecular Target",
+  legend_gp = gpar(fill = unname(rcas_palette)),
+  labels_gp = gpar(fontsize = 7, fontfamily = "Helvetica"),
+  title_gp = gpar(fontsize = 8, fontfamily = "Helvetica", fontface = "bold"),
+  ncol = 2
+)
+lgd_bmd <- Legend(
+  at = seq(-3, 3, 1),
+  title = "log10(BMD)",
+  col_fun = colorRamp2(
+    c(-2.5, -1.25, 0, 1.25, 2.5), rev(brewer.pal(5, "Spectral"))
+  ),
+  labels_gp = gpar(fontsize = 7, fontfamily = "Helvetica"),
+  title_gp = gpar(fontsize = 8, fontfamily = "Helvetica", fontface = "bold"),
+  direction = "horizontal"
+)
+
+# plot combined panels (Figure 1)
+png(
+  filename = paste0(dir_home, "output/Fig1.png"),
+  width = 2000, height = 2400, units = "px", res = 300
+)
+grid::pushViewport(viewport(
+  x = 0, y = 0.7, width = 1, height = 0.3, just = c("left", "bottom")
+))
+grid::grid.raster(sch_rcas)
+grid::popViewport()
+grid::pushViewport(grid::viewport(
+  x = 0.1, y = 0.45, width = 0.3, height = 0.2, just = c("left", "bottom")
+))
+draw(
+  ht_heparg,
+  merge_legend = TRUE, show_heatmap_legend = FALSE, newpage = FALSE
+)
+grid::popViewport()
+grid::pushViewport(grid::viewport(
+  x = 0.1, y = 0.17, width = 0.3, height = 0.2, just = c("left", "bottom")
+))
+draw(
+  ht_u2os,
+  merge_legend = TRUE, show_heatmap_legend = FALSE, newpage = FALSE
+)
+grid::popViewport()
+grid::pushViewport(grid::viewport(
+  x = 0.1, y = 0.08, width = 0.3, height = 0.05, just = c("left", "bottom")
+))
+draw(lgd_ref)
+grid::popViewport()
+grid::pushViewport(grid::viewport(
+  x = 0.1, y = 0.01, width = 0.3, height = 0.05, just = c("left", "bottom")
+))
+draw(lgd_bmd)
+grid::popViewport()
+grid::pushViewport(grid::viewport(
+  x = 0.5, y = 0, width = 0.5, height = 0.7, just = c("left", "bottom")
+))
+grid::grid.draw(
+  ggplotGrob(
+    plot_pot_eff +
+      facet_wrap(~source_signature, ncol = 1) +
+      theme(
+        strip.text.x = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        # legend.position = "bottom",
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 7)
+      )
+  )
+)
+grid::popViewport()
+grid::grid.text("A", x = 0.02, y = 0.98, gp = gpar(fontface = "bold", fontfamily = "Helvetica"))
+grid::grid.text("B", x = 0.02, y = 0.68, gp = gpar(fontface = "bold", fontfamily = "Helvetica"))
+grid::grid.text("C", x = 0.02, y = 0.38, gp = gpar(fontface = "bold", fontfamily = "Helvetica"))
+grid::grid.text("D", x = 0.52, y = 0.68, gp = gpar(fontface = "bold", fontfamily = "Helvetica"))
+dev.off()
 ```
 
 ## Conduct randomization test

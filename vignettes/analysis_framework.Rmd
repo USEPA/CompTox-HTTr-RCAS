@@ -295,7 +295,7 @@ counts_attr <- combined_attr %>%
     count_x = sum(count),
     pct = count / count_x * 100,
     count_label = case_when(
-      x == "tier1meas" ~ "1201",
+      x == "tier1meas" ~ as.character(length(unique(combined_attr$dtxsid))),
       node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
         "%d\n%s", count, node
       ),
@@ -599,7 +599,7 @@ plot_mismatch_pos <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[Tier~2])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
     title = "Tier 2 Positive Only"
   ) +
   theme_bw() +
@@ -631,7 +631,7 @@ plot_mismatch_sel <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[Tier~2])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
     title = "Tier 2 Positive + Selective"
   ) +
   theme_bw() +
@@ -667,9 +667,9 @@ plot_mismatch_all
 
 In order to examine whether RCAS-derived PODs are health-protective compared to
 previous PODs derived from transcriptomics and targeted screening data, RCAS-
-derived BMDs are compared to 5th percentile overall HTTr BMDs (aka Biological
-Phenotype Altering Concentrations, BPACs)($POD_{BPAC}$) and ToxCast orthogonal
-BMDs ($POD_{Tier 2}$).
+derived BMDs are compared to 5th percentile overall HTTr BMDs (i.e. Biological
+Phenotype Altering Concentrations, BPACs) ($POD_{BPAC-HTTr}$) and ToxCast orthogonal
+BMDs ($POD_{Orthogonal}$).
 
 ```{r pod-correlation}
 # calculate correlation between RCAS BMDs and HTTr BPACs
@@ -805,8 +805,8 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
   return(plot_pod)
 }
 
-plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC")
-plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "Tier 2", tier2 = TRUE)
+plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC-HTTr")
+plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "Orthogonal", tier2 = TRUE)
 
 # combine plots
 guide_or <- guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
@@ -826,7 +826,9 @@ plot_pod_all
 ## Inspect Candidate Perturbagens
 
 Tier 1/2 data are compiled for chemicals that met tier1- and tier2-selective
-criteria for comparison of potency estimates across targeted assays.
+criteria for comparison of potency estimates across targeted assays. PODs
+include $POD_{RCAS}$, $POD_{Orthogonal}$, and non-selective ToxCast-derived PODs
+($POD_{NS-ToxCast}$)
 
 Chemical structure images used in Fig. 5 were downloaded from the 
 [EPA CompTox Chemicals Dashboard](https://comptox.epa.gov/dashboard/), and were
@@ -938,7 +940,7 @@ plotCandidates <- function(combined_proc) {
     ) +
     scale_shape_manual(
       values = c(4, 16, 21),
-      labels = expression(POD[RCAS], POD[Orthogonal], POD[ToxCast])
+      labels = expression(POD[RCAS], POD[Orthogonal], POD[`NS-ToxCast`])
     ) +
     # facet_wrap(~source_signature, nrow = 1) +
     labs(

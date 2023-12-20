@@ -1,0 +1,13 @@
+﻿Ref.,Assay Endpoint,Source,Gene,Species,Cell Line,Assay Type
+AHR1,ATG_Ahr_CIS_up,Attagene,AHR,human,HepG2,mRNA induction
+AHR2,TOX21_AhR_LUC_Agonist,NCATS/NCGC,AHR,human,HepG2,luciferase induction
+GR1,ATG_GRE_CIS_up,Attagene,NR3C1,human,HepG2,mRNA induction
+GR2,ATG_GR_TRANS_up,Attagene,NR3C1,human,HepG2,mRNA induction
+GR3,TOX21_GR_BLA_Agonist_ratio,NCATS/NCGC,NR3C1,human,HeLa,beta lactamase induction
+RAR1,NVS_NR_hRARa_Agonist,Novascreen,RARA,human,Cell-free,fret
+RAR2,ATG_DR5_CIS_up,Attagene,RARA/B/G,human,HepG2,mRNA induction
+RAR3,TOX21_RAR_LUC_Agonist,NCATS/NCGC,RARA,mouse,C3H10T1/2,luciferase induction
+RXR1,ATG_RXRb_TRANS_up,Attagene,RXRB,human,HepG2,mRNA induction
+RXR2,ATG_RARg_TRANS_up,Attagene,RARG,human,HepG2,mRNA induction
+RXR3,TOX21_RXR_BLA_Agonist_ratio,NCATS/NCGC,RXRA,human,HEK293T,beta lactamase induction
+RXR4,TOX21_TR_RXR_BLA_Agonist_Followup_ratio,NCATS/NCGC,RXRA,human,RXRa-UAS-bla HEK 293T ,beta lactamase induction

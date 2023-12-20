@@ -49,6 +49,8 @@ library(circlize)
 library(ggsankey)
 library(ggupset)
 library(ggsignif)
+library(ggrepel)
+library(stringr)
 
 # set directories (`dir_home` should be set to the top-level directory)
 dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
@@ -67,6 +69,16 @@ path_rcas <- c(
 
 th <- theme(text = element_text(family = "Helvetica"))
 th_sankey <- theme_sankey(base_family = "Helvetica")
+
+# import tier 2 annotations for endpoint abbreviations (Table 1 from main text)
+tier2_annot <- read.csv(
+  paste0(dir_home, "data/Table1_Tier2Annotations.csv"),
+  stringsAsFactors = FALSE
+)
+
+# import reference chemical annotations per cell line
+rcas_heparg <- selectRCASGenes(path_rcas[1])
+rcas_u2os <- selectRCASGenes(path_rcas[2])
 ```
 
 # Select Orthogonal ToxCast Endpoints
@@ -177,10 +189,25 @@ load(path_export[2])
 u2os_full <- compare_full
 u2os_sum <- compare_sum
 
+# incorporate reference chemical annotations into full combined df
 combined_full <- rbind(
-  mutate(heparg_full, source = "heparg"),
-  mutate(u2os_full, source = "u2os")
-)
+  mutate(
+    heparg_full,
+    source = "heparg",
+    ref_class = rcas_heparg$httr.wide$ref_class[
+      match(dtxsid, rcas_heparg$httr.wide$dtxsid)
+    ]
+  ),
+  mutate(
+    u2os_full,
+    source = "u2os",
+    ref_class = rcas_u2os$httr.wide$ref_class[
+      match(dtxsid, rcas_u2os$httr.wide$dtxsid)
+    ]
+  )
+) %>%
+  mutate(source_signature = gsub("_up|_dn", "", paste0(source, "_", signature)))
+
 combined_sum <- rbind(
   mutate(heparg_sum, source = "heparg"),
   mutate(u2os_sum, source = "u2os")
@@ -781,7 +808,6 @@ guide_or <- guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)
 plot_pod_all <- cowplot::plot_grid(
   plot_bpac + guide_or,
   plot_tier2 + guide_or,
-  align = "v", axis = "lrtb",
   nrow = 2, labels = c("A", "B"), label_fontfamily = "Helvetica"
 )
 ggsave(
@@ -858,6 +884,210 @@ plot_bpac <- combined_sum %>%
   th +
   theme(legend.position = "bottom") +
   guides(label = "none")
+```
+
+## Inspect Candidate Perturbagens
+
+Tier 1/2 data are compiled for chemicals that met tier1- and tier2-selective
+criteria for comparison of potency estimates across targeted assays.
+
+```{r inspect-candidates, class.source = 'fold-hide'}
+# filter data per target + process for plotting
+compileTargetData <- function(combined_full, rcas, struct) {
+  combined_full <- arrange(combined_full, signature_label, source)
+  combined_filt <- combined_full %>%
+    filter(
+      source_signature == rcas &
+        tier1_selective &
+        tier2_selective &
+        n_toxcast_meas >= 2
+    )
+  combined_proc <- combined_filt %>%
+    group_by(dtxsid) %>%
+    mutate(
+      n_specific = n(),
+      aenm_annot = tier2_annot[["Ref."]][
+        match(aenm, tier2_annot[["Assay.Endpoint"]])
+      ],
+      aenms_specific = list(aenm_annot),
+      chem_category = case_when(
+        !is.na(ref_class) & ref_class == signature_label ~ "in-class reference",
+        !is.na(ref_class) & ref_class != signature_label ~ "out-of-class reference",
+        is.na(ref_class) ~ "test chemical"
+      ),
+      signature_f = case_when(
+        chem_category == "in-class reference" ~ "Reference Chemical",
+        TRUE ~ paste0("Tier 1/2 Candidate: ", source_signature)
+      ),
+      signature_f = factor(
+        signature_f,
+        levels = c(
+          "Reference Chemical", paste0(
+            "Tier 1/2 Candidate: ", unique(
+              filter(
+                combined_full,
+                tier1_selective & tier2_selective & n_toxcast_meas >= 2
+              )$source_signature
+            )
+          )
+        )
+      ),
+      signature_s = as.character(signature_f),
+      name_label = case_when(
+        tolower(name) %in% names(struct) |
+          chem_category == "in-class reference" ~ name,
+        TRUE ~ ""
+      )
+    ) %>%
+    slice_min(modl_acc, n = 1) %>%
+    ungroup() %>%
+    mutate(acc_rank = row_number(modl_acc)) %>%
+    group_by(dtxsid) %>%
+    pivot_longer(
+      cols = c(modl_acc, modl_acc_mode, bmd_log),
+      names_to = "metric",
+      values_to = "value"
+    )
+  return(combined_proc)
+}
+```
+
+```{r plot-candidate-fcn, class.source = 'fold-hide'}
+plotCandidates <- function(combined_proc) {
+  plot_set <- sort(unique(unlist(pull(combined_proc, aenms_specific))))
+  plot_candidates <- ggplot() +
+    geom_line(
+      data = filter(combined_proc, metric != "bmd_log"),
+      aes(x = aenms_specific, y = value, color = signature_f, group = acc_rank),
+      alpha = 0.8, position = position_dodge(width = .7)
+    ) +
+    geom_point(
+      data = combined_proc,
+      aes(
+        x = aenms_specific, y = value,
+        color = signature_f, group = acc_rank, shape = metric
+      ),
+      size = 2, alpha = 0.8, fill = "white",
+      position = position_dodge(width = .7)
+    ) +
+    scale_x_upset(order_by = "degree", sets = plot_set) +
+    geom_text_repel(
+      data = filter(combined_proc, metric == "modl_acc"),
+      aes(
+        x = aenms_specific, y = value,
+        color = signature_f, group = acc_rank, label = name_label
+      ),
+      position = position_dodge(width = 0.7),
+      max.overlaps = 50,
+      size = 3,
+      min.segment.length = 0,
+      box.padding = 0.7,
+      segment.curvature = 0.2,
+      segment.ncp = 3,
+      segment.angle = 20,
+      segment.linetype = 3
+    ) +
+    scale_color_manual(
+      values = c(
+        "grey20",
+        brewer.pal(length(levels(combined_proc$signature_f)) - 1, "Dark2")
+      ), drop = FALSE
+    ) +
+    scale_shape_manual(
+      values = c(4, 16, 21),
+      labels = expression(POD[RCAS], POD[Orthogonal], POD[ToxCast])
+    ) +
+    # facet_wrap(~source_signature, nrow = 1) +
+    labs(
+      x = "", y = "log10(POD)",
+      shape = "Metric", color = "Chemical Type"
+    ) +
+    theme_bw() +
+    th +
+    guides(
+      shape = guide_legend(nrow = 1, label.hjust = 0),
+      color = guide_legend(ncol = 1)
+    )
+  return(plot_candidates)
+}
+```
+
+```{r plot-structures, class.source = 'fold-hide'}
+# import pngs for chemical structures
+dir_structs <- paste0(dir_home, "data/ccd_structures/")
+structs <- list()
+for (filename_struct in list.files(dir_structs)) {
+  chemname <- gsub(".png", "", gsub("structure_", "", filename_struct))
+  struct_png <- png::readPNG(paste0(dir_structs, filename_struct))
+  # struct_dim <- dim(struct_png)[2:1]
+  struct_grob <- grid::rasterGrob(struct_png)
+  structs[[chemname]] <- struct_grob
+}
+struct_plot <- list()
+struct_plot[["AHR"]] <- cowplot::plot_grid(
+  structs[["1-4-diaminoanthraquinone"]], structs[["9-phenanthrol"]],
+  structs[["2-aminoanthraquinone"]],
+  labels = c("1,4-Diaminoanthraquinone", "9-Phenanthrol", "2-Aminoanthraquinone"),
+  label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
+  label_x = 0.5, label_y = 1, hjust = 0.5
+)
+struct_plot[["GR"]] <- cowplot::plot_grid(
+  structs[["fluorometholone"]], structs[["budesonide"]],
+  structs[["medroxyprogesterone-acetate"]],
+  labels = c("Fluorometholone", "Budesonide", "Medroxyprogesterone acetate"),
+  label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
+  label_x = 0.5, label_y = 1, hjust = 0.5
+)
+struct_plot[["RAR"]] <- cowplot::plot_grid(
+  structs[["etoxazole"]], structs[["imazalil"]],
+  structs[["dieldrin"]], structs[["aldrin"]],
+  labels = c("Imazalil", "Prochloraz", "Aldrin", "Dieldrin"),
+  label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
+  label_x = 0.5, label_y = 1, hjust = 0.5
+)
+```
+
+```{r plot-candidates, fig.width=5.3, fig.height=8}
+plots_candidate <- list()
+for (target in unique(combined_full$source_signature)) {
+  if (target != "heparg_hERG_Inhibitor") {
+    combined_target <- compileTargetData(combined_full, target, structs)
+    plots_candidate[[target]] <- plotCandidates(combined_target)
+  }
+}
+
+# pull legend for separate panel
+lgd <- cowplot::get_legend(
+  plots_candidate[["heparg_AHR_Agonist"]] +
+    theme(legend.position = "right") +
+    guides(
+      shape = guide_legend(nrow = 1, title = "Metric", label.hjust = 0),
+      color = guide_legend(
+        title = "Chemical Type", override.aes = list(label = "", alpha = 1)
+      ),
+    )
+)
+# combine figure panels (Fig. 5)
+plots_candidate_struct <- cowplot::plot_grid(
+  plots_candidate[["heparg_AHR_Agonist"]] + theme(legend.position = "none"),
+  struct_plot[["AHR"]],
+  plots_candidate[["u2os_NR3C1_Agonist"]] + theme(legend.position = "none"),
+  struct_plot[["GR"]],
+  plots_candidate[["heparg_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
+  struct_plot[["RAR"]],
+  plots_candidate[["u2os_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
+  lgd,
+  labels = c("A", "", "B", "", "C", "", "D", ""),
+  label_fontfamily = "Helvetica",
+  axis = "btlr",
+  align = "v",
+  ncol = 2
+)
+ggsave(
+  paste0(dir_home, "output/Fig6.png"), plots_candidate_struct,
+  width = 1600, height = 2400, units = "px", scale = 1.6, bg = "white"
+)
+plots_candidate_struct
 ```
 
 # Reproducibility

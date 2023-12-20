@@ -3,3 +3,4 @@ data/input/*
 data/output/*
 data/examples/invitrodb_*
 output/*.png
+data/ccd_structures/*

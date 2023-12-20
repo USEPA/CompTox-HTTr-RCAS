@@ -1029,7 +1029,7 @@ plots_candidate_struct <- cowplot::plot_grid(
   ncol = 2
 )
 ggsave(
-  paste0(dir_home, "output/Fig6.png"), plots_candidate_struct,
+  paste0(dir_home, "output/Fig5.png"), plots_candidate_struct,
   width = 1600, height = 2400, units = "px", scale = 1.6, bg = "white"
 )
 plots_candidate_struct

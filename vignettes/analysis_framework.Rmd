@@ -16,7 +16,7 @@ Assessment of current chemical screening data using a tiered NAM-based
 framework to prioritize chemicals that perturb key molecular targets.
 
 Chemicals are screened in Tier 1 using
-[Reference Class Associated Signatures(RCAS)](analysis_RCAS.Rmd),
+[Reference Class Associated Signatures (RCAS)](analysis_RCAS.html),
 initially for bioactivity (Tier 1-Positive) and additionally for selectivity
 versus non-targeted transcriptional responses (Tier 1-Selective). Chemicals
 with sufficient evidence of targeted behavior in Tier 1 are advanced
@@ -35,13 +35,13 @@ targeted assays as a prospective screen of data-poor chemicals.
 **Note**: Functions import ToxCast from InvitroDB using an internal 
 MySQL database and is only available for internal use. However, this
 method can be altered to work with a local instance of InvitroDB 
-[available for public download here](https://www.epa.gov/chemical-research/exploring-toxcast-data).
+[available for public download](https://www.epa.gov/chemical-research/exploring-toxcast-data).
 
 # Setup Environment
 
 ```{r env-setup, message=FALSE}
 # import packages for visualization
-# (note that other required packages will be imported by R scripts)
+# (note that other required packages will be imported by pipeline scripts)
 library(ggplot2)
 library(ComplexHeatmap)
 library(RColorBrewer)
@@ -91,6 +91,11 @@ in-class/out-of-class chemicals (agnostic of RCAS). Bioactivity classification
 performance and Wilcoxon rank-sum tests for potency estimates are used to test
 whether each assay can delineate chemical categories.
 
+Here, endpoints have been pre-selected using 13 reference chemical classes
+specified during RCAS generation, and ToxCast data for pre-selected endpoints
+are saved in the `data/examples` directory. Note that this script only needs to 
+be run once for all analyses (and not per target).
+
 ```{r select-endpoints, eval=FALSE}
 # set molecular targets for select assays for
 # (manually set to those used for RCAS generation)
@@ -127,6 +132,10 @@ selectHTSEndpoints(
 Using previous HTTr (Tier 1) and ToxCast (Tier 2) targeted potency estimates,
 the framework above is used to evaluate 1,201 chemicals screened in HTTr across
 HepaRG and U-2 OS cell lines. 
+
+Here, tiered framework results have been pre-generated using RCAS potency
+estimates generated in the [RCAS analysis vignette](analysis_RCAS.html), and
+results for each cell line are saved in the `data/examples` directory.
 
 Note: `path_catalog` refers to previously generated signature-level
 concentration-response profiles for 11,037 signatures in the HTTr signature
@@ -169,9 +178,6 @@ for (idx in seq_len(length(path_cr))) {
   )
 }
 ```
-
-Here, framework results are pre-generated and saved in the `data/examples` 
-directory.
 
 ```{r import-framework}
 # load results for heparg/u2os cell lines + combine
@@ -220,7 +226,7 @@ combined_sum <- rbind(
 ## Compare Chemical Prioritization
 
 The attrition of chemicals across assessment criteria are summarized and
-compared across molecular targets/cell lines.
+compared across molecular targets/cell lines using a Sankey plot.
 
 ```{r attrition-process}
 # de-duplicate inactive signatures for dtxsids
@@ -301,7 +307,7 @@ counts_attr <- combined_attr %>%
   )
 ```
 
-```{r attrition-plot, fig.width=8, fig.height=4}
+```{r attrition-plot, class.source = 'fold-hide', fig.width=8, fig.height=4}
 plot_attr <- combined_attr %>%
   make_long(tier1meas, tier1pos, tier1sel, tier2pos, tier2sel) %>%
   mutate(across(
@@ -379,7 +385,7 @@ with targeted assay results, Fisher's exact tests are used to
 determine whether a positive outcome from each RCAS is assocaiated 
 with a positive outcome from at least one orthogonal ToxCast endpoint.
 
-```{r test-outcome-association}
+```{r test-outcome-association, warning=FALSE}
 # run exact tests on all rcas
 calcFisher <- function(df, col_x, col_y, fisher = TRUE, simulate.p.values = FALSE) {
   contingency <- table(df[[col_x]], df[[col_y]], dnn = c(col_x, col_y))
@@ -406,9 +412,7 @@ calcOdds <- function(df, col_x, col_y) {
     return(data.frame())
   }
 }
-```
 
-```{r visualize-outcome-associations, warning=FALSE, fig.width=6, fig.height=3}
 # test associations and calculate odds ratios for all rcas but hERG_Inhibitor
   # (no Tier 2 multi-concentration bioactivity estimates available)
 assoc_positive <- list(test = data.frame(), tbls = data.frame())
@@ -428,7 +432,9 @@ for (sig in unique(combined_sum$source_signature)) {
     or_positive <- rbind(or_positive, cbind(or, source_signature = sig))
   }
 }
+```
 
+```{r visualize-outcome-associations, class.source = 'fold-hide', fig.width=6, fig.height=3}
 # visualize odds ratios
 plot_or <- or_positive %>%
   ggplot() +
@@ -474,8 +480,6 @@ plot_or_all <- cowplot::plot_grid(
 )
 plot_or_all
 ```
-
-Full figure (Fig. 2):
 
 ```{r plot-fig2, class.source = 'fold-hide'}
 # combine panels for Figure 2
@@ -528,7 +532,7 @@ mismatch_test %>%
   DT::datatable()
 ```
 
-```{r test-mismatch-contrasts, fig.width=6, fig.height=3.4}
+```{r test-mismatch-contrasts}
 # test individual contrasts via Wilcoxon rank sum tests
 mismatch_contr <- combined_sum %>%
   filter(tier2_positive & n_toxcast_meas >= 2) %>%
@@ -557,6 +561,18 @@ contr_pos <- mismatch_contr %>%
   )) %>%
   pull(p_label)
 
+# repeat for tier 2-selective chemicals
+contr_sel <- mismatch_contr %>%
+  filter(tier2_selective & group2 == "negative") %>%
+  arrange(source_signature, group1) %>%
+  mutate(p_label = case_when(
+    p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
+    TRUE ~ as.character(signif(p.value, 2))
+  )) %>%
+  pull(p_label)
+```
+
+```{r plot-mismatch-contrasts, class.source = 'fold-hide', fig.width=8, fig.height=4.8}
 tier2_lim <- c(-2.5, 4)
 plot_mismatch_pos <- combined_sum %>%
   filter(
@@ -589,17 +605,6 @@ plot_mismatch_pos <- combined_sum %>%
   theme_bw() +
   th +
   theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
-
-
-# repeat for tier 2-selective chemicals
-contr_sel <- mismatch_contr %>%
-  filter(tier2_selective & group2 == "negative") %>%
-  arrange(source_signature, group1) %>%
-  mutate(p_label = case_when(
-    p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
-    TRUE ~ as.character(signif(p.value, 2))
-  )) %>%
-  pull(p_label)
 
 plot_mismatch_sel <- combined_sum %>%
   filter(
@@ -724,18 +729,18 @@ calcCor <- function(combined_sum, col_compare, tier2 = FALSE) {
 
 cor_bpac <- calcCor(combined_sum, "bmd_log_5")
 cor_bpac %>%
-  select(-c(n_chems, alternative, cor_label, outcome_label)) %>%
+  select(-c(n_chems, alternative, cor_label, outcome_label, method)) %>%
   mutate(across(where(is.numeric), ~signif(.x, 2))) %>%
   DT::datatable()
 
 cor_tier2 <- calcCor(combined_sum, "modl_acc", tier2 = TRUE)
 cor_tier2 %>%
-  select(-c(n_chems, alternative, cor_label, outcome_label)) %>%
+  select(-c(n_chems, alternative, cor_label, outcome_label, method)) %>%
   mutate(across(where(is.numeric), ~signif(.x, 2))) %>%
   DT::datatable()
 ```
 
-```{r pod-comparison}
+```{r pod-comparison, class.source = 'fold-hide', fig.width=8, fig.height=6.3}
 # plot RCAS BMDs against HTTr BPACs/Tier 2 PODs
 plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 = FALSE) {
   if (tier2) {
@@ -818,80 +823,18 @@ ggsave(
 plot_pod_all
 ```
 
-```{r pod-comparison-bpac}
-# calculate correlation between RCAS BMDs and HTTr BPACs
-cor_bpac <- combined_sum %>%
-  filter(outcome_tier1 != "negative") %>%
-  distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
-  group_by(source_signature, outcome_tier1) %>%
-  select(dtxsid, bmd_log, bmd_log_5) %>%
-  nest() %>%
-  mutate(n_chems = unlist(purrr::map(data, nrow))) %>%
-  filter(n_chems >= 3) %>%
-  mutate(
-    cor_obj = purrr::map(data, ~ cor.test(.x$bmd_log, .x$bmd_log_5)),
-    cor_df = purrr::map(cor_obj, broom::tidy)
-  ) %>%
-  unnest(cor_df) %>%
-  mutate(
-    cor_label = case_when(
-      p.value <= 0.05 ~ paste0("r = ", round(estimate, 2), "*"),
-      TRUE ~ paste0("r = ", round(estimate, 2))
-    ),
-    tier1_label = case_when(
-      outcome_tier1 == "selective" ~ "Positive + Selective",
-      TRUE ~ "Positive Only"
-    )
-  ) %>%
-  select(-data, -cor_obj)
-
-# plot RCAS BMDs against HTTr BPACs
-plot_bpac <- combined_sum %>%
-  filter(outcome_tier1 != "negative") %>%
-  distinct(dtxsid, source_signature, .keep_all = TRUE) %>%
-  mutate(
-    tier1_label = case_when(
-      outcome_tier1 == "selective" ~ "Positive + Selective",
-      TRUE ~ "Positive Only"
-    )
-  ) %>%
-  ggplot(aes(bmd_log, bmd_log_5, color = tier1_label)) +
-  geom_point(na.rm = TRUE, alpha = 0.7) +
-  geom_abline(
-    slope = 1, intercept = c(-0.5, 0.5), linetype = "dashed", color = "grey50"
-  ) +
-  geom_abline(slope = 1, intercept = 0, color = "grey50") +
-  geom_text(
-    data = filter(cor_bpac, tier1_label == "Positive"),
-    aes(label = cor_label),
-    x = -1.8, y = 2.5, show.legend = FALSE
-  ) +
-  geom_text(
-    data = filter(cor_bpac, tier1_label == "Selective"),
-    aes(label = cor_label),
-    x = -1.8, y = 1.8, show.legend = FALSE
-  ) +
-  facet_wrap(~source_signature, nrow = 1) +
-  labs(
-    x = expression(log[10](POD[RCAS])),
-    y = expression(log[10](POD[BPAC])),
-    color = "Tier 1 Outcome"
-  ) +
-  scale_color_manual(values = scales::hue_pal()(3)[c(3, 2)]) +
-  scale_x_continuous(limits = c(-3, 3)) +
-  scale_y_continuous(limits = c(-3, 3)) +
-  theme_bw() +
-  th +
-  theme(legend.position = "bottom") +
-  guides(label = "none")
-```
-
 ## Inspect Candidate Perturbagens
 
 Tier 1/2 data are compiled for chemicals that met tier1- and tier2-selective
 criteria for comparison of potency estimates across targeted assays.
 
-```{r inspect-candidates, class.source = 'fold-hide'}
+Chemical structure images used in Fig. 5 were downloaded from the 
+[EPA CompTox Chemicals Dashboard](https://comptox.epa.gov/dashboard/), and were
+stored in the `data/ccd_structures` directory using a
+`structure_<chem_name>.png` naming convention (not included in repo due to size
+constraints).
+
+```{r inspect-candidates}
 # filter data per target + process for plotting
 compileTargetData <- function(combined_full, rcas, struct) {
   combined_full <- arrange(combined_full, signature_label, source)
@@ -1012,7 +955,7 @@ plotCandidates <- function(combined_proc) {
 }
 ```
 
-```{r plot-structures, class.source = 'fold-hide'}
+```{r plot-structures}
 # import pngs for chemical structures
 dir_structs <- paste0(dir_home, "data/ccd_structures/")
 structs <- list()
@@ -1047,7 +990,7 @@ struct_plot[["RAR"]] <- cowplot::plot_grid(
 )
 ```
 
-```{r plot-candidates, fig.width=5.3, fig.height=8}
+```{r plot-candidates, class.source = 'fold-hide', fig.width=8, fig.height=12}
 plots_candidate <- list()
 for (target in unique(combined_full$source_signature)) {
   if (target != "heparg_hERG_Inhibitor") {

@@ -454,12 +454,12 @@ plot_or <- or_positive %>%
 plot_pval <- or_positive %>%
   mutate(p.value = signif(p.value, digits = 2), siglabel = as.factor(1:4)) %>%
   ggplot(aes(x = as.factor(1), y = siglabel, label = p.value)) +
-  geom_text() +
+  geom_text(size = 3) +
   scale_y_discrete(limits = rev) +
-  labs(y = NULL, x = " ") +
+  labs(y = NULL, x = " ", title = "p-value") +
   th +
   theme(
-    plot.title = element_text(hjust = 0.5),
+    plot.title = element_text(hjust = 0.5, size = 12),
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.text.x = element_text(color = "white"),
@@ -472,8 +472,8 @@ plot_pval <- or_positive %>%
     panel.grid.minor = element_blank(),
     plot.background = element_blank()
     # plot.margin = unit(c(5.5, 0, 5.5, 0), "pt")
-  ) +
-  ggtitle("p-value")
+  )# +
+  # ggtitle("p-value")
 
 plot_or_all <- cowplot::plot_grid(
   plot_or, plot_pval, nrow = 1, rel_widths = c(1, 0.2)
@@ -493,12 +493,12 @@ plot_fig2 <- cowplot::plot_grid(
     NULL, plot_or, plot_pval, NULL,
     nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
   ),
-  nrow = 3, rel_heights = c(1, 1.2, 0.8),
+  nrow = 3, rel_heights = c(0.6, 1.2, 0.8),
   labels = c("A", "B", "C"), label_fontfamily = "Helvetica"
 )
 ggsave(
   paste0(dir_home, "output/Fig2.png"), plot_fig2,
-  width = 1100, height = 1400, units = "px", scale = 2, bg = "white"
+  width = 1000, height = 1200, units = "px", scale = 2, bg = "white"
 )
 ```
 
@@ -970,9 +970,9 @@ for (filename_struct in list.files(dir_structs)) {
 }
 struct_plot <- list()
 struct_plot[["AHR"]] <- cowplot::plot_grid(
-  structs[["1-4-diaminoanthraquinone"]], structs[["9-phenanthrol"]],
+  structs[["1-4-diaminoanthraquinone"]], structs[["3-hydroxyfluorene"]],
   structs[["2-aminoanthraquinone"]],
-  labels = c("1,4-Diaminoanthraquinone", "9-Phenanthrol", "2-Aminoanthraquinone"),
+  labels = c("1,4-Diaminoanthraquinone", "3-Hydroxyfluorene", "2-Aminoanthraquinone"),
   label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
   label_x = 0.5, label_y = 1, hjust = 0.5
 )

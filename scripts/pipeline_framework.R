@@ -136,8 +136,8 @@ runFramework <- function(
             ., select(
                 compare_tier2,
                 dsstox_substance_id, chnm, n_toxcast_meas, aeid, aenm, hitc,
-                use.me, modl_acc, specific_crit, modl_acc_mode, tier2_positive,
-                tier2_selective, tier2_conflict, signature
+                use.me, modl_acc, specific_crit, modl_acc_mode, modl_acc_sd,
+                tier2_positive, tier2_selective, tier2_conflict, signature
             ),
             by = c(
                 "dtxsid" = "dsstox_substance_id",
@@ -163,7 +163,7 @@ runFramework <- function(
                 ),
                 unique
             ),
-            across(c(modl_acc, modl_acc_mode), ~ min(.x, na.rm = TRUE)),
+            across(c(modl_acc, modl_acc_mode, modl_acc_sd), ~ min(.x, na.rm = TRUE)),
             across(c(tier2_positive, tier2_selective, tier2_conflict), any),
             .groups = "drop"
         )
@@ -403,7 +403,7 @@ combineTier2 <- function(chems_match_rcas, mc5_burst_rcas, threshold_specific = 
         mutate(
             tier2_positive = !is.na(use.me) & use.me == 1,
             tier2_selective = case_when(
-                specific_crit == "median_bioactive" ~ modl_acc <= (modl_acc_mode - threshold_specific),
+                specific_crit == "median_bioactive" ~ modl_acc <= (modl_acc_mode - modl_acc_sd),
                 specific_crit == "n<10" ~ modl_acc <= 2.5 - threshold_specific
             ),
             tier2_selective = case_when(

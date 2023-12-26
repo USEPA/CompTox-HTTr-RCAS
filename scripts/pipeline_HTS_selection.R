@@ -625,7 +625,8 @@ calcBurstMC5 <- function(mc5_full) {
             modl_acc_med = median(modl_acc, na.rm = TRUE),
             modl_acc_5 = quantile(modl_acc, probs = c(0.05), na.rm = TRUE),
             modl_acc_abs5 = nth(modl_acc, 5, order_by = modl_acc),
-            modl_acc_mode = calcMode(modl_acc)
+            modl_acc_mode = calcMode(modl_acc),
+            modl_acc_sd = sd(modl_acc, na.rm = TRUE)
         )
     return(mc5_burst)
 }

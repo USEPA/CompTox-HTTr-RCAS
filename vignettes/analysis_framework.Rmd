@@ -879,7 +879,7 @@ compileTargetData <- function(combined_full, rcas, struct) {
       ),
       signature_s = as.character(signature_f),
       name_label = case_when(
-        tolower(name) %in% names(struct) |
+        tolower(gsub(",", "-", name)) %in% names(struct) |
           chem_category == "in-class reference" ~ name,
         TRUE ~ ""
       )
@@ -926,8 +926,8 @@ plotCandidates <- function(combined_proc) {
       max.overlaps = 50,
       size = 3,
       min.segment.length = 0,
-      box.padding = 0.7,
-      segment.curvature = 0.2,
+      box.padding = 1,
+      segment.curvature = 0.4,
       segment.ncp = 3,
       segment.angle = 20,
       segment.linetype = 3
@@ -986,7 +986,7 @@ struct_plot[["GR"]] <- cowplot::plot_grid(
 struct_plot[["RAR"]] <- cowplot::plot_grid(
   structs[["etoxazole"]], structs[["imazalil"]],
   structs[["dieldrin"]], structs[["aldrin"]],
-  labels = c("Imazalil", "Prochloraz", "Aldrin", "Dieldrin"),
+  labels = c("Etoxazole", "Imazalil", "Dieldrin", "Aldrin"),
   label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
   label_x = 0.5, label_y = 1, hjust = 0.5
 )

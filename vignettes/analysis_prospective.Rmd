@@ -125,3 +125,180 @@ key_pl <- read_xlsx(
   sheet = "Order595-Mosaic 778508 & 779139"
 )
 ```
+
+## Harmonize Data
+
+Individual tables are harmonized for matching structure as well as to match
+expected inputs for concentration-response profiling via `tcplfit2`. Assay 
+component endpoint names (`aenm` column) are also constructed to match naming
+conventions in invitrodb v4.1.
+
+```{r harmonize-dx}
+# format DiscoverX data:
+  # pivot replicate-level data to long form
+  # construct aenms
+  # add chemical identifiers from sample key
+  # harmonize columns/colnames
+proc_dx <- ef_dx %>%
+  pivot_longer(
+    cols = c(`Value 1`, `Value 2`),
+    names_to = "repi",
+    values_to = "resp"
+  ) %>%
+  mutate(
+    repi = gsub("Value ", "", repi),
+    aenm = paste0("EF_DX_NR_h", `Assay Target`)
+  ) %>%
+  left_join(
+    ., select(key_dx, EPA_SAMPLE_ID, DTXSID, PREFERRED_NAME),
+    by = c("Compound Name" = "EPA_SAMPLE_ID")
+  ) %>%
+  select(
+    aenm, `Compound Name`, DTXSID, PREFERRED_NAME,
+    repi, `Conc(uM)`, resp, `% Efficacy`
+  )
+colnames(proc_dx) <- c(
+  "aenm", "sample_id", "dtxsid", "name",
+  "repi", "conc", "resp", "resp.pc"
+)
+
+proc_dx %>%
+  arrange(aenm, dtxsid, repi, conc) %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 3))) %>%
+  DT::datatable()
+```
+
+```{r harmonize-pl}
+# format Panlabs data:
+  # pivot agonist/antagonist modes to long-form + remove missing rows
+  # construct assay metadata columns
+  # construct aenms
+  # add chemical identifiers from sample key
+  # harmonize columns/colnames
+proc_pl <- ef_pl %>%
+  as_tibble() %>%
+  pivot_longer(
+    cols = c(Agonist.Response, Antagonist.Response),
+    names_to = "endpoint",
+    values_to = "resp.pc"
+  ) %>%
+  filter(!is.na(resp.pc)) %>%
+  mutate(
+    repi = "12",
+    replicate_id = paste0(Compound.Code, "_", repi),
+    endpoint = gsub(".Response", "", endpoint),
+    target = case_when(
+      grepl("hERG", Ascii.Assay.Name) ~ "KCNH2",
+      grepl("RARG", Ascii.Assay.Name) ~ "RARG",
+      grepl("RXRbeta", Ascii.Assay.Name) ~ "RXRB"
+    ),
+    aenm = case_when(
+      `Route.of.Administration` == "Radioligand Binding" ~ paste0("ERF_PL_IC_h", target),
+      TRUE ~ paste0("ERF_PL_NR_COA_h", target)
+    ),
+    resp = NA
+  ) %>%
+  left_join(
+    ., select(key_pl, EPA_SAMPLE_ID, DTXSID, PREFERRED_NAME),
+    by = c("Compound.Code" = "EPA_SAMPLE_ID")
+  ) %>%
+  select(
+    aenm, Compound.Code, DTXSID, PREFERRED_NAME,
+    repi, Concentration.of.Test.Compound, resp, resp.pc
+  )
+colnames(proc_pl) <- c(
+  "aenm", "sample_id", "dtxsid", "name",
+  "repi", "conc", "resp", "resp.pc"
+)
+
+proc_pl %>%
+  arrange(aenm, dtxsid, repi, conc) %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 3))) %>%
+  DT::datatable()
+```
+
+```{r combine-datasets}
+proc_all <- rbind(proc_dx, proc_pl)
+
+# define concentration indices (cndx) + log-scale conc (logc)
+proc_all <- proc_all %>%
+  group_by(aenm, dtxsid, repi) %>%
+  mutate(
+    sample_repi_id = paste0(sample_id, "_", repi),
+    cndx = row_number(conc),
+    logc = log10(conc)
+  )
+```
+
+# Conduct Concentration-Response Profiling
+
+## Determine response cutoff levels
+
+Baseline median absolute deviations (BMADs) are determined for each assay
+from response values using the 2 lowest concentrations of all test chemicals, as
+well-level data is not reported for positive/negative controls.
+
+Because cutoff levels can be high due to the biased selection of chemicals
+likely to demonstrate bioactivity in each assay, minimum and maximum thresholds
+are employed for each cutoff:
+
+Rule | Cutoff
+-----|-------
+3*BMAD < 0.2 | 0.2
+0.2 < 3*BMAD < 0.5 | 3*BMAD
+3*BMAD > 0.5 | 0.5
+
+```{r cr-bmads}
+# define bmad + onesd + cutoff from lowest 2 concentrations
+bmads <- proc_all %>%
+  group_by(aenm) %>%
+  filter(cndx <= 2) %>%
+  summarise(
+    bmad = mad(resp.pc),
+    bmad3 = 3 * bmad,
+    onesd = sd(resp.pc),
+    cutoff = case_when(
+      bmad3 < 20 ~ 20,
+      bmad3 > 50 ~ 50,
+      TRUE ~ bmad3
+    )
+  )
+proc_all <- left_join(proc_all, bmads, by = "aenm")
+bmads %>%
+  mutate(across(-aenm, ~ signif(.x, 3))) %>%
+  DT::datatable()
+```
+
+## Perform curve-fitting
+
+```{r cr-run}
+fit_all <- data.frame()
+for (aenm_fit in unique(proc_all$aenm)) {
+  proc_aenm <- filter(proc_all, aenm == aenm_fit)
+  for (spid_fit in unique(proc_aenm$sample_id)) {
+    proc_spid <- arrange(filter(proc_aenm, sample_id == spid_fit), conc)
+    # pull conc/resp/noise data into list object
+    dat.obj <- list(
+      conc = proc_spid$conc,
+      resp = proc_spid$resp.pc,
+      bmed = 0,
+      cutoff = unique(proc_spid$cutoff),
+      onesd = unique(proc_spid$onesd),
+      aenm = aenm_fit,
+      dtxsid = unique(proc_spid$dtxsid),
+      casrn = NA,
+      name = unique(proc_spid$name)
+    )
+    # run CR modeling (no gnls model)
+    res <- concRespCore(
+      dat.obj,
+      fitmodels = c(
+        "cnst", "hill", "poly1", "poly2", "pow", "exp2", "exp3", "exp4", "exp5"
+      )
+    )
+    rownames(res) <- NULL
+    # store results in final df
+    fit_all <- rbind(fit_all, res)
+  }
+}
+```

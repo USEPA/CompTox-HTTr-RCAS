@@ -26,12 +26,13 @@ library(tidyr)
 library(readxl)
 library(RColorBrewer)
 library(ggrepel)
-source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
 
 # set directories (`dir_home` should be set to the top-level directory)
 dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
 dir_scripts <- paste0(dir_home, "scripts/")
 setwd(dir_home)
+
+source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
 
 # set paths for rcas/framework results
 path_rcas <- c(
@@ -45,6 +46,8 @@ path_export <- paste0(
     "data/examples/framework_u2os.RData"
   )
 )
+
+th <- theme(text = element_text(family = "Helvetica"))
 ```
 
 ```{r import-framework}
@@ -383,12 +386,124 @@ plot_class <- combined_prosp %>%
   ggplot(aes(x = "", y = prop, fill = outcome_prosp, label = prop_label)) +
   geom_col(color = "black") +
   coord_polar(theta = "y") +
-  geom_text(position = position_stack(vjust = 0.5)) +
+  geom_text(position = position_stack(vjust = 0.5), family = "Helvetica") +
   facet_wrap(~target_f, nrow = 3) +
   scale_fill_brewer(palette = "Set2") +
   # scale_color_manual(values = c("black", "white")) +
   labs(x = "", y = "", fill = "Assay\nOutcome") +
-  theme_void()
+  theme_void() +
+  th
 
 plot_class
+```
+
+## Sensitivity of Potency Estimates
+
+Tier 1 RCAS-derived PODs (`bmd_log`) are compared to potency values from
+prospective assays to assess the relative sensitivity of each tiered result.
+
+```{r analyze-potency}
+# visualize trends between potency estimates
+plot_potency <- combined_prosp %>%
+  filter(outcome_prosp == "Positive") %>%
+  mutate(
+    acc_log = log10(acc),
+    reference_type = case_when(
+      reference_type == "None" ~ "Test Chemical",
+      TRUE ~ "Positive Reference\nChemical"
+    ),
+    target_f = factor(
+      assay_target, levels = c("AHR", "hERG", "RARg", "RXRb", "GR")
+    )
+  ) %>%
+  ggplot(
+    aes(
+      bmd_log, acc_log,
+      color = target_f, shape = reference_type,
+      label = stringr::str_trunc(name, 30)
+    )
+  ) +
+  geom_abline(slope = 1, intercept = 0, color = "grey30") +
+  geom_abline(
+    slope = 1, intercept = c(-0.5, 0.5), color = "grey30", linetype = "dashed"
+  ) +
+  geom_point(size = 2) +
+  geom_text_repel(min.segment.length = 0, size = 2.4, max.overlaps = 5, box.padding = 0.28) +
+  scale_shape_manual(values = c(3, 16, 4)) +
+  labs(
+    x = expression(log[10](POD[RCAS])),
+    y = expression(log[10](POD[Prospective])),
+    color = "Target", shape = "Chemical Type"
+  ) +
+  theme_bw() +
+  th
+
+plot_potency
+```
+
+Spearman correlation coefficients of potency metrics are also determined
+per assay.
+
+```{r analyze-correlation}
+cor_potency <- combined_prosp %>%
+  filter(outcome_prosp == "Positive") %>%
+  mutate(
+    acc_log = log10(acc),
+    target_f = factor(
+      assay_target,
+      levels = c("AHR", "hERG", "RARg", "RXRb", "GR")
+    )
+  ) %>%
+  group_by(target_f) %>%
+  mutate(n_active = n()) %>%
+  filter(n_active >= 3) %>%
+  nest() %>%
+  mutate(
+    cor_obj = purrr::map(
+      data, function(x) cor.test(x$bmd_log, x$acc_log, method = "spearman")
+    ),
+    cor_df = purrr::map(cor_obj, broom::tidy)
+  ) %>%
+  unnest(cor_df) %>%
+  select(target_f, estimate, p.value)
+
+cor_potency %>%
+  mutate(across(c(estimate, p.value), ~ signif(.x, 2))) %>%
+  DT::datatable()
+```
+
+```{r analysis-combined, class.source = 'fold-hide', warning=FALSE}
+# plot correlation table as grob
+tt <- gridExtra::ttheme_default(base_family = "Helvetica")
+plot_cor <- cor_potency %>%
+  mutate(
+    estimate = signif(estimate, 2),
+    p.value = case_when(
+      p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
+      TRUE ~ as.character(signif(p.value, 2))
+    )
+  ) %>%
+  rename(Target = target_f, `Spearman r` = estimate, `p-value` = p.value) %>%
+  gridExtra::tableGrob(., rows = NULL, theme = tt)
+
+# combine individual plots into single figure (Fig. 6)
+plot_all <- cowplot::plot_grid(
+  plot_class,
+  cowplot::plot_grid(
+    NULL, plot_potency, plot_cor,
+    ncol = 1, labels = c("B", "", "C"), rel_heights = c(0.2, 1, 0.8),
+    label_fontfamily = "Helvetica"
+  ),
+  labels = c("A", ""), ncol = 2, label_fontfamily = "Helvetica"
+)
+ggsave(
+  paste0(dir_home, "output/Fig6.png"), plot_all,
+  width = 1400, height = 960, units = "px", scale = 2, bg = "white"
+)
+```
+
+# Reproducibility
+
+```{r reproducibility}
+sessionInfo()
 ```

@@ -1,0 +1,127 @@
+---
+title: "Prospective Profiling of Data-Poor Chemicals"
+author: "Jesse Rogers"
+date: "December 28, 2023"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: show
+---
+
+Assessment of prospective chemical screening data for chemicals predicted to
+perturb key molecular targets in high-throughtput transcriptomics.
+
+# Setup Environment
+
+```{r env-setup, message=FALSE}
+# import packages for visualization
+# (note that other required packages will be imported by pipeline scripts)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(RColorBrewer)
+library(ggrepel)
+source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
+
+# set directories (`dir_home` should be set to the top-level directory)
+dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
+dir_scripts <- paste0(dir_home, "scripts/")
+setwd(dir_home)
+
+# set paths for rcas/framework results
+path_rcas <- c(
+  paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+)
+path_export <- paste0(
+  dir_home,
+  c(
+    "data/examples/framework_heparg.RData",
+    "data/examples/framework_u2os.RData"
+  )
+)
+```
+
+```{r import-framework}
+# import rcas results
+rcas_heparg <- selectRCASGenes(path_rcas[1])
+rcas_u2os <- selectRCASGenes(path_rcas[2])
+
+# import framework results
+load(path_export[1])
+heparg_full <- compare_full
+heparg_sum <- compare_sum
+load(path_export[2])
+u2os_full <- compare_full
+u2os_sum <- compare_sum
+
+# incorporate reference chemical annotations into full combined df
+combined_full <- rbind(
+  mutate(
+    heparg_full,
+    source = "heparg",
+    ref_class = rcas_heparg$httr.wide$ref_class[
+      match(dtxsid, rcas_heparg$httr.wide$dtxsid)
+    ]
+  ),
+  mutate(
+    u2os_full,
+    source = "u2os",
+    ref_class = rcas_u2os$httr.wide$ref_class[
+      match(dtxsid, rcas_u2os$httr.wide$dtxsid)
+    ]
+  )
+) %>%
+  mutate(source_signature = gsub("_up|_dn", "", paste0(source, "_", signature)))
+
+combined_sum <- rbind(
+  mutate(heparg_sum, source = "heparg"),
+  mutate(u2os_sum, source = "u2os")
+) %>%
+  mutate(source_signature = gsub("_up|_dn", "", paste0(source, "_", signature)))
+```
+
+## Import Data
+
+Data were received from Eurofins DiscoverX and Eurofins Panlabs separately as 
+control-normalized (i.e. percent activation) values.
+
+Importantly, DiscoverX data were received as individual replicate-level data,
+whereas Panlabs data were pre-averaged. Both forms are accepted by `tcplfit2`,
+but may potentially alter confidence intervals for potency estimates.
+
+```{r import-eurofins}
+# import chemical id table
+httr_chems <- read_xlsx(
+  paste0(dir_home, "data/eurofins/Eurofins_expt_chemicals_2022-04-22.xlsx"),
+  sheet = "Sheet1"
+)
+table(httr_chems$assay_target, httr_chems$reference_type)
+
+# import DiscoverX (xlsx) and Panlabs (txt)
+ef_dx <- read_xlsx(
+  paste0(dir_home, "data/eurofins/US034-0017803-O_nhrSCAN_ _Data_Sheet.xlsx"),
+  sheet = "Primary Data"
+)
+ef_pl <- read.table(
+  paste0(dir_home, "data/eurofins/US034-0017803.TXT"),
+  sep = "\t",
+  header = TRUE,
+  stringsAsFactors = FALSE
+)
+
+# import sample keys
+key_dx <- read_xlsx(
+  paste0(dir_home, "data/eurofins/EPA_778506_EurofinsUS_30_20220915_key.xlsx"),
+  sheet = "Order594-Mosaic 778506 & 778507"
+)
+key_pl <- read_xlsx(
+  paste0(dir_home, "data/eurofins/EPA_778508_EurofinsUS_32_20220915_key_revised.xlsx"),
+  sheet = "Order595-Mosaic 778508 & 779139"
+)
+```

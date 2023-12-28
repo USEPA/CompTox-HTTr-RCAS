@@ -83,7 +83,10 @@ combined_sum <- rbind(
   mutate(heparg_sum, source = "heparg"),
   mutate(u2os_sum, source = "u2os")
 ) %>%
-  mutate(source_signature = gsub("_up|_dn", "", paste0(source, "_", signature)))
+  mutate(
+    source_signature = gsub("_up|_dn", "", paste0(source, "_", signature)),
+    signature = gsub("_up|_dn", "", signature)
+  )
 ```
 
 ## Import Data
@@ -301,4 +304,91 @@ for (aenm_fit in unique(proc_all$aenm)) {
     fit_all <- rbind(fit_all, res)
   }
 }
+```
+
+# Analyze Results
+
+```{r combine-tiers}
+# get Tier 1 results matching prospective chemicals/assays
+tier1_chems <- httr_chems %>%
+  mutate(
+    signature = case_when(
+      assay_target == "AHR" ~ "AHR_Agonist",
+      assay_target == "GR" ~ "NR3C1_Agonist",
+      assay_target == "hERG" ~ "hERG_Inhibitor",
+      TRUE ~ "RAR_RXR_Agonist"
+    )
+  ) %>%
+  left_join(
+    ., select(
+      combined_sum,
+      dtxsid, signature, bmd_log, n_toxcast_meas,
+      outcome_tier1, outcome_tier2, source_signature
+    ),
+    by = c("dtxsid", "signature"),
+    relationship = "many-to-many"
+  )
+# de-duplicate Tier 1 results for multiple RAR/RXR signatures
+tier1_chems <- tier1_chems %>%
+  group_by(dtxsid, assay_target) %>%
+  slice_min(bmd_log, n = 1) %>%
+  ungroup()
+
+# incorporate prospective profiling results
+combined_prosp <- fit_all %>%
+  mutate(
+    assay_target = case_when(
+      grepl("AHR", aenm) ~ "AHR",
+      grepl("GR", aenm) ~ "GR",
+      grepl("KCNH2", aenm) ~ "hERG",
+      grepl("RARG", aenm) ~ "RARg",
+      grepl("RXRB", aenm) ~ "RXRb"
+    ),
+    outcome_prosp = ifelse(
+      hitcall >= 0.9 & top_over_cutoff >= 1, "Positive", "Negative"
+    )
+  ) %>%
+  select(
+    dtxsid, assay_target, aenm, hitcall,
+    top_over_cutoff, acc, bmd, outcome_prosp
+  ) %>%
+  left_join(tier1_chems, ., by = c("dtxsid", "assay_target"))
+```
+
+## Classification of test chemicals
+
+Chemical bioactivity classifications are defined as a continuous hitcall >= 0.9
+and top_over_cutoff >= 1.
+
+```{r analyze-classification}
+# compare classification results as pie charts
+plot_class <- combined_prosp %>%
+  filter(reference_type == "None") %>%
+  mutate(
+    target_f = factor(
+      assay_target, levels = c("AHR", "hERG", "RARg", "RXRb", "GR")
+    )
+  ) %>%
+  count(target_f, outcome_prosp) %>%
+  complete(target_f, outcome_prosp, fill = list(n = 0)) %>%
+  group_by(target_f) %>%
+  mutate(
+    n_sum = sum(n),
+    prop = n / n_sum,
+    prop_label = case_when(
+      prop > 0 ~ paste0(n, " (", round(prop * 100), "%)"),
+      TRUE ~ ""
+    )
+  ) %>%
+  ggplot(aes(x = "", y = prop, fill = outcome_prosp, label = prop_label)) +
+  geom_col(color = "black") +
+  coord_polar(theta = "y") +
+  geom_text(position = position_stack(vjust = 0.5)) +
+  facet_wrap(~target_f, nrow = 3) +
+  scale_fill_brewer(palette = "Set2") +
+  # scale_color_manual(values = c("black", "white")) +
+  labs(x = "", y = "", fill = "Assay\nOutcome") +
+  theme_void()
+
+plot_class
 ```

@@ -196,7 +196,7 @@ loadMC5 <- function(
         host = db_host
     )
     con <- dbConnect(
-        drv = RMySQL::MySQL(),
+        drv = RMariaDB::MariaDB(),
         user = usernm,
         password = passwd,
         host = db_host,
@@ -204,7 +204,7 @@ loadMC5 <- function(
     )
     # import mc5 table + subset duplicate chids
     mc5 <- tcplPrepOtpt(tcplLoadData(lvl = 5, type = "mc"))
-    mc5 <- tcplSubsetChid(mc5)
+    mc5 <- tcplSubsetChid(mc5, export_ready = FALSE)
     # import mc6 QC flags
     mc6 <- tcplPrepOtpt(tcplLoadData(lvl = 6, fld = "m4id", val = mc5$m4id, type = "mc"))
     # parse QC flags + annotate mc5
@@ -276,7 +276,7 @@ loadAnnotations <- function(
         host = db_host
     )
     con <- dbConnect(
-        drv = RMySQL::MySQL(),
+        drv = RMariaDB::MariaDB(),
         user = usernm,
         password = passwd,
         host = db_host,
@@ -350,7 +350,7 @@ loadSC2 <- function(
         host = db_host
     )
     con <- dbConnect(
-        drv = RMySQL::MySQL(),
+        drv = RMariaDB::MariaDB(),
         user = usernm,
         password = passwd,
         host = db_host,

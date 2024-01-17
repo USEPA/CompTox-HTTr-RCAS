@@ -215,6 +215,8 @@ loadMC5 <- function(
     mc5[, flag.length := ifelse(!is.na(mc6_flags), count.fields(textConnection(mc6_flags), sep = ","), NA)]
     # parse assay name
     mc5[, asnm := tstrsplit(aenm, "_", fixed = TRUE, keep = c(1))]
+
+    dbDisconnect(con)
     return(mc5)
 }
 
@@ -320,6 +322,8 @@ loadAnnotations <- function(
     ] <- 2.5
     # save to specified directory
     save(ace, gene, cytotox, file = filepath_save)
+
+    dbDisconnect(con)
     return()
 }
 
@@ -370,6 +374,8 @@ loadSC2 <- function(
     sc2$logc <- agg$logc[match(sc2$s2id, agg$s2id)]
     # save table
     save(sc2, file = filepath_save)
+
+    dbDisconnect(con)
     return(sc2)
 }
 

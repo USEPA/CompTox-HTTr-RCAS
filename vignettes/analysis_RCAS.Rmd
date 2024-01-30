@@ -221,7 +221,7 @@ plotHeatmap <- function(rcas, title, composite, width = 8, height = 8) {
   rcas.ht <- Heatmap(
     rcas.mat,
     colorRamp2(c(-2.5, -1.25, 0, 1.25, 2.5), rev(brewer.pal(5, "Spectral"))),
-    name = paste0("log10(BMD)"),
+    name = paste0("log10(BMC)"),
     column_title = paste0("RCAS-Identified Genes: ", title_label),
     column_title_gp = gpar(fontsize = 8),
     row_title = "Reference Chemical",
@@ -402,7 +402,7 @@ plot_pot_eff <- cr_refchems %>%
   scale_color_brewer(palette = "Set1") +
   facet_wrap(~source_signature) +
   labs(
-    x = "log10(BMD)", y = "Signed Top Over Cutoff",
+    x = "log10(BMC)", y = "Signed Top Over Cutoff",
     color = "Chemical in\nReference\nClass",
     shape = "Passed\nBioactivity\nThresholds",
     title = ""
@@ -434,7 +434,7 @@ lgd_ref <- Legend(
 )
 lgd_bmd <- Legend(
   at = seq(-3, 3, 1),
-  title = "log10(BMD)",
+  title = "log10(BMC)",
   col_fun = colorRamp2(
     c(-2.5, -1.25, 0, 1.25, 2.5), rev(brewer.pal(5, "Spectral"))
   ),

@@ -295,7 +295,7 @@ counts_attr <- combined_attr %>%
     count_x = sum(count),
     pct = count / count_x * 100,
     count_label = case_when(
-      x == "tier1meas" ~ gettextf("%d\nChemicals", count),
+      x == "tier1meas" ~ gettextf("%d\nUnique\nChemicals", count),
       node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
         "%d\n%s", count, node
       ),
@@ -628,7 +628,18 @@ plot_mismatch_pos <- combined_sum %>%
       tier2_positive &
       !tier2_selective
   ) %>%
-  ggplot(aes(modl_acc, source_signature, color = outcome_tier1)) +
+  mutate(
+    outcome_tier1_label = case_when(
+      outcome_tier1 == "positive" ~ "Positive Only",
+      outcome_tier1 == "selective" ~ "Positive + Selective",
+      outcome_tier1 == "negative" ~ "Negative"
+    ),
+    outcome_tier1_label = factor(
+      outcome_tier1_label,
+      levels = c("Negative", "Positive Only", "Positive + Selective")
+    )
+  ) %>%
+  ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
   geom_boxplot(na.rm = TRUE, outlier.shape = NA) +
   geom_point(
     na.rm = TRUE, size = 1, alpha = 0.5,
@@ -660,7 +671,18 @@ plot_mismatch_sel <- combined_sum %>%
       tier2_positive &
       tier2_selective
   ) %>%
-  ggplot(aes(modl_acc, source_signature, color = outcome_tier1)) +
+  mutate(
+    outcome_tier1_label = case_when(
+      outcome_tier1 == "positive" ~ "Positive Only",
+      outcome_tier1 == "selective" ~ "Positive + Selective",
+      outcome_tier1 == "negative" ~ "Negative"
+    ),
+    outcome_tier1_label = factor(
+      outcome_tier1_label,
+      levels = c("Negative", "Positive Only", "Positive + Selective")
+    )
+  ) %>%
+  ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
   geom_boxplot(na.rm = TRUE, outlier.shape = NA) +
   geom_point(
     na.rm = TRUE, size = 1, alpha = 0.5,
@@ -830,7 +852,7 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
     geom_text(
       data = filter(cor_rcas, outcome_label == "Positive + Selective"),
       aes(label = cor_label),
-      x = -1.8, y = 1.8, show.legend = FALSE
+      x = -1.8, y = 1.8, show.legend = FALSE, family = "Helvetica"
     ) +
     facet_wrap(~source_signature, nrow = 1) +
     labs(
@@ -853,7 +875,7 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
   return(plot_pod)
 }
 
-plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC-HTTr")
+plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC1")
 plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "Orthogonal", tier2 = TRUE)
 
 # combine plots
@@ -982,13 +1004,13 @@ plotCandidates <- function(combined_proc) {
     ) +
     scale_color_manual(
       values = c(
-        "grey20",
+        "grey50",
         brewer.pal(length(levels(combined_proc$signature_f)) - 1, "Dark2")
       ), drop = FALSE
     ) +
     scale_shape_manual(
       values = c(4, 16, 21),
-      labels = expression(POD[RCAS], POD[Orthogonal], POD[`NS-ToxCast`])
+      labels = expression(POD[RCAS], POD[Orthogonal], POD[`NS2`])
     ) +
     # facet_wrap(~source_signature, nrow = 1) +
     labs(

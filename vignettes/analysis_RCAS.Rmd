@@ -45,8 +45,8 @@ source(paste0(dir_scripts, "pipeline_RCAS_generation.R"))
 source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
 
 path_rcas <- c(
-  paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
-  paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+  paste0(dir_home, "data/examples/rcas_heparg_gene_bnd.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene_bnd.RData")
 )
 
 th <- theme(text = element_text(family = "Helvetica"))
@@ -115,7 +115,9 @@ rcas_heparg <- analyzeHTTrANOVA(
   filepath.ref = path_refchems,
   col.httr.type = "gene",
   col.ref.class = "cluster_target",
-  metric.fill = 2.5
+  metric.fill = 2.5,
+  bmd.low.bnd = 0.1,
+  bmd.up.bnd = 10
 )
 save(rcas_heparg, file = path_rcas[1])
 
@@ -124,7 +126,9 @@ rcas_u2os <- analyzeHTTrANOVA(
   filepath.ref = path_refchems,
   col.httr.type = "gene",
   col.ref.class = "cluster_target",
-  metric.fill = 2.5
+  metric.fill = 2.5,
+  bmd.low.bnd = 0.1,
+  bmd.up.bnd = 10
 )
 save(rcas_u2os, file = path_rcas[2])
 

@@ -136,7 +136,7 @@ runFramework <- function(
             ., select(
                 compare_tier2,
                 dsstox_substance_id, chnm, n_toxcast_meas, aeid, aenm, hitc,
-                use.me, modl_acc, specific_crit, modl_acc_mode, modl_acc_sd,
+                use.me, modl_acc, specific_crit, modl_acc_mode, modl_acc_sd, modl_acc_5,
                 tier2_positive, tier2_selective, tier2_conflict, signature
             ),
             by = c(
@@ -159,7 +159,7 @@ runFramework <- function(
                 c(
                     name, chnm, bmd_log, bmd_log_5, bmd_log_med, bmd_log_mode,
                     threshold_1sd, tier1_positive, tier1_selective,
-                    n_toxcast_meas
+                    n_toxcast_meas, modl_acc_5
                 ),
                 unique
             ),

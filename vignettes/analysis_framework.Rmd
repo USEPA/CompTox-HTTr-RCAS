@@ -63,8 +63,8 @@ source(paste0(dir_scripts, "pipeline_HTS_selection.R"))
 source(paste0(dir_scripts, "pipeline_framework.R"))
 
 path_rcas <- c(
-  paste0(dir_home, "data/examples/rcas_heparg_gene.RData"),
-  paste0(dir_home, "data/examples/rcas_u2os_gene.RData")
+  paste0(dir_home, "data/examples/rcas_heparg_gene_bnd.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene_bnd.RData")
 )
 
 th <- theme(text = element_text(family = "Helvetica"))
@@ -483,7 +483,7 @@ plot_or_all
 
 ```{r plot-fig2, class.source = 'fold-hide'}
 # combine panels for Figure 2
-fmwk <- png::readPNG(paste0(dir_home, "vignettes/Fig2A.png"))
+fmwk <- png::readPNG(paste0(dir_home, "vignettes/Fig2A_detail.png"))
 fmwk_grob <- grid::rasterGrob(fmwk)
 
 plot_fig2 <- cowplot::plot_grid(
@@ -493,7 +493,7 @@ plot_fig2 <- cowplot::plot_grid(
     NULL, plot_or, plot_pval, NULL,
     nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
   ),
-  nrow = 3, rel_heights = c(0.6, 1.2, 0.8),
+  nrow = 3, rel_heights = c(0.7, 1.2, 0.7),
   labels = c("A", "B", "C"), label_fontfamily = "Helvetica"
 )
 ggsave(

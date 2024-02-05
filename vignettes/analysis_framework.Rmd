@@ -229,55 +229,55 @@ The attrition of chemicals across assessment criteria are summarized and
 compared across molecular targets/cell lines using a Sankey plot.
 
 ```{r attrition-process}
-# de-duplicate inactive signatures for dtxsids
+# de-duplicate active/inactive signatures for dtxsids
 combined_attr <- combined_sum %>%
   group_by(dtxsid) %>%
-  mutate(
-    multi_positive = sum(tier1_positive) > 0,
-    rank_signature = row_number(),
-    keep_signature = case_when(
-      multi_positive ~ tier1_positive,
-      TRUE ~ rank_signature == 1
-    )
-  ) %>%
-  ungroup() %>%
-  filter(keep_signature)
-
-# generate labels for attrition plot
-combined_attr <- combined_attr %>%
-  mutate(
+  summarise(
     tier1meas = "Profiled",
-    tier2_measured = tier1_selective & n_toxcast_meas >= 2,
+    tier1pos = list(source_signature[tier1_positive]),
+    tier1sel = list(source_signature[tier1_positive & tier1_selective]),
+    tier2meas = list(source_signature[tier1_positive & tier1_selective & n_toxcast_meas >= 2]),
+    tier2pos = list(source_signature[tier1_positive & tier1_selective & tier2_positive & n_toxcast_meas >= 2]),
+    tier2sel = list(source_signature[tier1_positive & tier1_selective & tier2_positive & tier2_selective & n_toxcast_meas >= 2])
+  ) %>%
+  mutate(
     tier1pos = case_when(
-      tier1_positive ~ source_signature, TRUE ~ "Negative"
+      lengths(tier1pos) > 1 ~ "Multiple",
+      lengths(tier1pos) == 1 ~ paste(tier1pos),
+      TRUE ~ "Negative"
     ),
     tier1sel = case_when(
-      tier1_positive & tier1_selective ~ source_signature,
-      tier1_positive & !tier1_selective ~ "Non-selective"
+      tier1pos == "Negative" ~ NA,
+      lengths(tier1sel) > 1 ~ "Multiple",
+      lengths(tier1sel) == 1 ~ paste(tier1sel),
+      TRUE ~ "Non-selective"
     ),
     tier2pos = case_when(
-      tier1_selective & n_toxcast_meas >= 2 & tier2_positive ~ source_signature,
-      tier1_selective & n_toxcast_meas >= 2 & !tier2_positive ~ "Negative",
-      tier1_selective & n_toxcast_meas < 2 ~ "No Orthogonal\nEndpoints"
+      tier1sel %in% c("Multiple", unique(combined_sum$source_signature)) & lengths(tier2meas) == 0 ~ "No Orthogonal\nEndpoints",
+      tier1sel == "Non-selective" | is.na(tier1sel) ~ NA,
+      lengths(tier2pos) > 1 ~ "Multiple",
+      lengths(tier2pos) == 1 ~ paste(tier2pos),
+      TRUE ~ "Negative"
     ),
     tier2sel = case_when(
-      tier1_selective & tier2_measured & tier2_positive & tier2_selective ~ source_signature,
-      tier1_selective & tier2_measured & tier2_positive & !tier2_selective ~ "Non-selective"
+      tier2pos == "Negative" | tier2pos == "No Orthogonal\nEndpoints" | is.na(tier2pos) ~ NA,
+      lengths(tier2sel) > 1 ~ "Multiple",
+      lengths(tier2sel) == 1 ~ paste(tier2sel),
+      TRUE ~ "Non-selective"
     )
   )
 
 # generate color palettes
 labels_attr <- c(
-  unique(combined_attr$source_signature),
-  "Profiled", "Negative", "Non-selective", "No Orthogonal\nEndpoints"
+  unique(combined_sum$source_signature),
+  "Multiple", "Profiled", "Negative", "Non-selective", "No Orthogonal\nEndpoints"
 )
 fill_attr <- c(
-  RColorBrewer::brewer.pal(5, "Dark2")[c(1, 3, 5, 4, 2)],
+  RColorBrewer::brewer.pal(6, "Dark2")[c(1, 3, 5, 2, 4, 6)],
   "#b1d4fc", rep("grey70", 2), "navy"
 )
 color_attr <- c(
-  RColorBrewer::brewer.pal(5, "Dark2")[c(1, 3, 5, 4, 2)],
-  "#377ac7", rep("grey30", 2), "navy"
+  rep("grey10", 7), rep("grey30", 2), "navy"
 )
 names(fill_attr) <- labels_attr
 names(color_attr) <- labels_attr
@@ -295,13 +295,13 @@ counts_attr <- combined_attr %>%
     count_x = sum(count),
     pct = count / count_x * 100,
     count_label = case_when(
-      x == "tier1meas" ~ as.character(length(unique(combined_attr$dtxsid))),
+      # x == "tier1meas" ~ as.character(length(unique(combined_attr$dtxsid))),
       node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
         "%d\n%s", count, node
       ),
-      x == "tier2sel" & !node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
-        "%d Candidates", count
-      ),
+      # x == "tier2sel" & !node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
+      #   "%d Candidates", count
+      # ),
       TRUE ~ gettextf("%d", count)
     )
   )
@@ -322,17 +322,17 @@ plot_attr <- combined_attr %>%
     fill = node,
     label = count_label
   )) +
-  geom_sankey(na.rm = TRUE, flow.alpha = 0.6, space = 100) +
+  geom_sankey(na.rm = TRUE, flow.alpha = 0.6, space = 120) +
   geom_sankey_text(
     aes(color = node),
-    size = 2.2,
-    space = 100,
+    size = 2.5,
+    space = 120,
     hjust = 0,
     position = position_nudge(x = 0.1),
     lineheight = 0.8
   ) +
   geom_segment(
-    aes(x = 4.75, y = -239, xend = 5, yend = -239),
+    aes(x = 4.75, y = -100, xend = 5, yend = -100),
     arrow = arrow(length = unit(0.005, "npc"), type = "closed"),
     lineend = "butt",
     linejoin = "mitre",
@@ -340,7 +340,7 @@ plot_attr <- combined_attr %>%
     linewidth = 2.2
   ) +
   geom_text(
-    aes(x = 5, y = -239, label = "Prioritized for\nTargeted Assays"),
+    aes(x = 5, y = -100, label = "Prioritized for\nTargeted Assays"),
     color = "navy",
     size = 2.2,
     hjust = 0,
@@ -348,17 +348,17 @@ plot_attr <- combined_attr %>%
     fontface = "plain"
   ) +
   scale_fill_manual(
-    values = fill_attr, breaks = labels_attr[1:5], na.value = "white"
+    values = fill_attr, breaks = labels_attr[1:6], na.value = "white"
   ) +
   scale_color_manual(
-    values = color_attr, breaks = labels_attr[1:5], na.value = "white"
+    values = color_attr, breaks = labels_attr[1:6], na.value = "white"
   ) +
   scale_x_discrete(labels = c(
     "Tier 1\nProfiled",
     "Tier 1\nPositive",
-    "Tier 1\nSelective",
+    "Tier 1\nPositive + Selective",
     "Tier 2\nPositive",
-    "Tier 2\nSelective"
+    "Tier 2\nPositive + Selective"
   )) +
   coord_cartesian(clip = "off") +
   labs(x = "", fill = "RCAS") +
@@ -367,13 +367,13 @@ plot_attr <- combined_attr %>%
   th +
   theme(
     axis.title.y = element_blank(),
-    legend.position = c(0.85, 0.75),
+    legend.position = c(0.75, 0.8),
     legend.text = element_text(size = 7),
     legend.title = element_text(size = 9),
     legend.key.size = unit(5, "mm"),
     plot.margin = unit(c(0, 1, 0, 0), "cm")
   ) +
-  guides(color = "none", fill = guide_legend(reverse = TRUE))
+  guides(color = "none", fill = guide_legend(reverse = TRUE, ncol = 2))
 
 plot_attr
 ```

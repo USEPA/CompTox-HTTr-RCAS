@@ -847,7 +847,7 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
     geom_text(
       data = filter(cor_rcas, outcome_label == "Positive Only"),
       aes(label = cor_label),
-      x = -1.8, y = 2.5, show.legend = FALSE
+      x = -1.8, y = 2.5, show.legend = FALSE, family = "Helvetica"
     ) +
     geom_text(
       data = filter(cor_rcas, outcome_label == "Positive + Selective"),
@@ -891,6 +891,21 @@ ggsave(
 )
 
 plot_pod_all
+```
+
+```{r pod-comparison-bpac2}
+# plot RCAS BMDs against Tier 2 BPACs (POD_BPAC2)
+cor_bpac2 <- calcCor(combined_sum, "modl_acc_5", tier2 = FALSE)
+cor_bpac2 %>%
+  select(-c(n_chems, alternative, cor_label, outcome_label, method)) %>%
+  mutate(across(where(is.numeric), ~signif(.x, 2))) %>%
+  DT::datatable()
+
+plot_bpac2 <- plotPods(combined_sum, cor_bpac2, "modl_acc_5", "BPAC2", tier2 = FALSE)
+ggsave(
+  paste0(dir_home, "output/FigS4.png"), plot_bpac2,
+  width = 1400, height = 480, units = "px", bg = "white", scale = 2
+)
 ```
 
 ## Inspect Candidate Perturbagens

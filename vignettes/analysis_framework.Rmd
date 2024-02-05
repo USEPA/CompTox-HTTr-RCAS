@@ -250,11 +250,11 @@ combined_attr <- combined_sum %>%
       tier1pos == "Negative" ~ NA,
       lengths(tier1sel) > 1 ~ "Multiple",
       lengths(tier1sel) == 1 ~ paste(tier1sel),
-      TRUE ~ "Non-selective"
+      TRUE ~ "Positive Only"
     ),
     tier2pos = case_when(
       tier1sel %in% c("Multiple", unique(combined_sum$source_signature)) & lengths(tier2meas) == 0 ~ "No Orthogonal\nEndpoints",
-      tier1sel == "Non-selective" | is.na(tier1sel) ~ NA,
+      tier1sel == "Positive Only" | is.na(tier1sel) ~ NA,
       lengths(tier2pos) > 1 ~ "Multiple",
       lengths(tier2pos) == 1 ~ paste(tier2pos),
       TRUE ~ "Negative"
@@ -263,14 +263,14 @@ combined_attr <- combined_sum %>%
       tier2pos == "Negative" | tier2pos == "No Orthogonal\nEndpoints" | is.na(tier2pos) ~ NA,
       lengths(tier2sel) > 1 ~ "Multiple",
       lengths(tier2sel) == 1 ~ paste(tier2sel),
-      TRUE ~ "Non-selective"
+      TRUE ~ "Positive Only"
     )
   )
 
 # generate color palettes
 labels_attr <- c(
   unique(combined_sum$source_signature),
-  "Multiple", "Profiled", "Negative", "Non-selective", "No Orthogonal\nEndpoints"
+  "Multiple", "Profiled", "Negative", "Positive Only", "No Orthogonal\nEndpoints"
 )
 fill_attr <- c(
   RColorBrewer::brewer.pal(6, "Dark2")[c(1, 3, 5, 2, 4, 6)],
@@ -296,10 +296,10 @@ counts_attr <- combined_attr %>%
     pct = count / count_x * 100,
     count_label = case_when(
       # x == "tier1meas" ~ as.character(length(unique(combined_attr$dtxsid))),
-      node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
+      node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
         "%d\n%s", count, node
       ),
-      # x == "tier2sel" & !node %in% c("Negative", "Non-selective", "No Orthogonal\nEndpoints") ~ gettextf(
+      # x == "tier2sel" & !node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
       #   "%d Candidates", count
       # ),
       TRUE ~ gettextf("%d", count)
@@ -329,7 +329,8 @@ plot_attr <- combined_attr %>%
     space = 120,
     hjust = 0,
     position = position_nudge(x = 0.1),
-    lineheight = 0.8
+    lineheight = 0.8,
+    family = "Helvetica"
   ) +
   geom_segment(
     aes(x = 4.75, y = -100, xend = 5, yend = -100),
@@ -342,10 +343,12 @@ plot_attr <- combined_attr %>%
   geom_text(
     aes(x = 5, y = -100, label = "Prioritized for\nTargeted Assays"),
     color = "navy",
-    size = 2.2,
+    size = 2.5,
     hjust = 0,
     nudge_x = 0.1,
-    fontface = "plain"
+    fontface = "plain",
+    lineheight = 0.8,
+    family = "Helvetica"
   ) +
   scale_fill_manual(
     values = fill_attr, breaks = labels_attr[1:6], na.value = "white"

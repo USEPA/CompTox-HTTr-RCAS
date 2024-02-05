@@ -295,7 +295,7 @@ counts_attr <- combined_attr %>%
     count_x = sum(count),
     pct = count / count_x * 100,
     count_label = case_when(
-      # x == "tier1meas" ~ as.character(length(unique(combined_attr$dtxsid))),
+      x == "tier1meas" ~ gettextf("%d\nChemicals", count),
       node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
         "%d\n%s", count, node
       ),
@@ -435,53 +435,93 @@ for (sig in unique(combined_sum$source_signature)) {
     or_positive <- rbind(or_positive, cbind(or, source_signature = sig))
   }
 }
+
+# test associations and calculate odds ratios for tier1-selective outcomes
+assoc_selective <- list(test = data.frame(), tbls = data.frame())
+or_selective <- data.frame()
+for (sig in unique(combined_sum$source_signature)) {
+  assoc <- combined_sum %>%
+    filter(source_signature == sig) %>%
+    distinct(dtxsid, tier2_selective, .keep_all = TRUE) %>%
+    calcFisher(., "tier1_selective", "tier2_selective")
+  or <- combined_sum %>%
+    filter(source_signature == sig) %>%
+    distinct(dtxsid, tier2_selective, .keep_all = TRUE) %>%
+    calcOdds(., "tier1_selective", "tier2_selective")
+  if (sig != "heparg_hERG_Inhibitor") {
+    assoc_selective$test <- rbind(assoc_selective$test, cbind(assoc$test, source_signature = sig))
+    assoc_selective$tbls <- rbind(assoc_selective$tbls, cbind(assoc$tbls, source_signature = sig))
+    or_selective <- rbind(or_selective, cbind(or, source_signature = sig))
+  }
+}
 ```
 
 ```{r visualize-outcome-associations, class.source = 'fold-hide', fig.width=6, fig.height=3}
 # visualize odds ratios
-plot_or <- or_positive %>%
+plot_or <- rbind(
+  mutate(or_positive, comparison = "Positive Only"),
+  mutate(or_selective, comparison = "Positive + Selective")
+) %>%
+  mutate(
+    comparison = factor(
+      comparison, levels = c("Positive Only", "Positive + Selective")
+    ),
+    p_label = ifelse(
+      p.value < 1E-3,
+      paste0("p = ", formatC(p.value, format = "e", digits = 2)),
+      paste0("p = ", (as.character(signif(p.value, 2))))
+    )
+  ) %>%
   ggplot() +
   geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
   geom_errorbar(
     aes(y = source_signature, xmin = conf.low, xmax = conf.high),
-    width = 0.1
+    width = 0.2
   ) +
+  # geom_text(
+  #   aes(y = source_signature, x = conf.high + 1, label = p_label),
+  #   color = "grey30",
+  #   angle = 270,
+  #   size = 2.5, 
+  # ) +
   geom_point(aes(estimate, source_signature), color = "red", size = 2) +
   scale_x_log10() +
   scale_y_discrete(limits = rev) +
+  facet_wrap(~comparison) +
   labs(x = "Odds ratio (95% CI, log scale)", y = "RCAS", title = " ") +
   theme_bw() +
-  th
+  th +
+  theme(strip.background = element_blank(), strip.text.x = element_text(size = 10))
 
 # combine plot with exact test p-values
-plot_pval <- or_positive %>%
-  mutate(p.value = signif(p.value, digits = 2), siglabel = as.factor(1:4)) %>%
-  ggplot(aes(x = as.factor(1), y = siglabel, label = p.value)) +
-  geom_text(size = 3) +
-  scale_y_discrete(limits = rev) +
-  labs(y = NULL, x = " ", title = "p-value") +
-  th +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 12),
-    axis.text.y = element_blank(),
-    axis.title.y = element_blank(),
-    axis.text.x = element_text(color = "white"),
-    axis.line = element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.background = element_blank(),
-    panel.border = element_blank(),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    plot.background = element_blank()
-    # plot.margin = unit(c(5.5, 0, 5.5, 0), "pt")
-  )# +
-  # ggtitle("p-value")
+# plot_pval <- or_positive %>%
+#   mutate(p.value = signif(p.value, digits = 2), siglabel = as.factor(1:4)) %>%
+#   ggplot(aes(x = as.factor(1), y = siglabel, label = p.value)) +
+#   geom_text(size = 3) +
+#   scale_y_discrete(limits = rev) +
+#   labs(y = NULL, x = " ", title = "p-value") +
+#   th +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, size = 12),
+#     axis.text.y = element_blank(),
+#     axis.title.y = element_blank(),
+#     axis.text.x = element_text(color = "white"),
+#     axis.line = element_blank(),
+#     axis.ticks.x = element_blank(),
+#     axis.ticks.y = element_blank(),
+#     panel.background = element_blank(),
+#     panel.border = element_blank(),
+#     panel.grid.major = element_blank(),
+#     panel.grid.minor = element_blank(),
+#     plot.background = element_blank()
+#     # plot.margin = unit(c(5.5, 0, 5.5, 0), "pt")
+#   )# +
+#   # ggtitle("p-value")
 
-plot_or_all <- cowplot::plot_grid(
-  plot_or, plot_pval, nrow = 1, rel_widths = c(1, 0.2)
-)
-plot_or_all
+# plot_or_all <- cowplot::plot_grid(
+#   plot_or, plot_pval, nrow = 1, rel_widths = c(1, 0.2)
+# )
+# plot_or_all
 ```
 
 ```{r plot-fig2, class.source = 'fold-hide'}
@@ -492,12 +532,17 @@ fmwk_grob <- grid::rasterGrob(fmwk)
 plot_fig2 <- cowplot::plot_grid(
   fmwk_grob,
   plot_attr,
-  cowplot::plot_grid(
-    NULL, plot_or, plot_pval, NULL,
-    nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
-  ),
-  nrow = 3, rel_heights = c(0.7, 1.2, 0.7),
-  labels = c("A", "B", "C"), label_fontfamily = "Helvetica"
+  plot_or + theme(plot.margin = unit(c(0, 1, 0.2, 1), "cm")),
+  # cowplot::plot_grid(
+  #   NULL, plot_or, plot_pval, NULL,
+  #   nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
+  # ),
+  nrow = 3,
+  rel_heights = c(0.7, 1.3, 0.7),
+  # align = "h",
+  # axis = "lrtb",
+  labels = c("A", "B", "C"),
+  label_fontfamily = "Helvetica"
 )
 ggsave(
   paste0(dir_home, "output/Fig2.png"), plot_fig2,

@@ -15,7 +15,8 @@ analyzeHTTrANOVA <- function(
   col.httr.metric = "bmd_log",
   metric.fill = 3, class.count = 3,
   p.adjust.method = "fdr",
-  coff.aov.p = 0.05, coff.posthoc.p = 0.05
+  coff.aov.p = 0.05, coff.posthoc.p = 0.05,
+  bmd.low.bnd = NULL, bmd.up.bnd = NULL
 ) {
   #' runtime function for ANOVA gene- or signature-level analysis
   #' @param filepath.data character | path of .RData file containing HTTr
@@ -49,11 +50,17 @@ analyzeHTTrANOVA <- function(
   #'   genes/signatures for posthoc analysis
   #' @param coff.posthoc.p double | value of cutoff to select significant
   #'   class-pairs after posthoc analysis
+  #' @param bmd.low.bmd double | multiplier for bmd lower bound. A value of .1
+  #'  would require the bmd to be no lower than 1/10th of the lowest
+  #'  concentration tested.
+  #' @param bmd.up.bmd double | multiplier for bmd upper bound. A value of 10
+  #'  would require the bmd to be no higher than 10 times the highest
+  #'  concentration tested.
   #' @return list of objects: [ref], [httr.wide], [aov.return], [posthoc.return]
   #' @example httr.anova <- analyzeHTTrANOVA(filepath.data, filepath.ref, "gene", "cluster_target")
   #' @export
   # load httr/ref data
-  httr <- loadData(filepath.data)
+  httr <- loadData(filepath.data, bmd.low.bnd, bmd.up.bnd)
   ref <- loadRefList(
     filepath.ref,
     col.dtxsid = col.ref.dtxsid,
@@ -159,10 +166,16 @@ multiFactorHTTrAnova <- function(filepath.data, filepath.ref, col.httr.type,
 }
 
 
-loadData <- function(filepath.data) {
+loadData <- function(filepath.data, bmd.low.bnd, bmd.up.bnd) {
   #' utility function for loading HTTr concentration-response curve fit data
   #' @param filepath.data character | path of .RData file containing HTTr
   #'   concentration-response data
+  #' @param bmd.low.bnd double | multiplier for bmd lower bound. A value of .1
+  #'  would require the bmd to be no lower than 1/10th of the lowest
+  #'  concentration tested.
+  #' @param bmd.up.bnd double | multiplier for bmd upper bound. A value of 10
+  #'  would require the bmd to be no higher than 10 times the highest
+  #'  concentration tested.
   #' @return tibble of concentration-response data witth additional log(BMD)
   #'   column `bmd_log`
   #' @example httr <- loadData(filepath)
@@ -175,10 +188,32 @@ loadData <- function(filepath.data) {
   }
   # import + harmonize object name + add bmd_log
   load(filepath.data)
-  httr <- get(ls()[ls() != "filepath.data"])
+  httr <- get(ls()[!ls() %in% c("filepath.data", "bmd.low.bnd", "bmd.up.bnd")])
   httr <- httr %>%
     as_tibble() %>%
     mutate(bmd_log = case_when(!is.na(bmd) ~ log10(bmd)))
+
+  # bound bmd estimates if arguments are specified
+  if (!is.null(bmd.low.bnd)) {
+    httr <- mutate(
+      httr,
+      conc_min = unlist(purrr::map(conc, ~ min(as.numeric(unlist(stringr::str_split(.x, "\\|")))))),
+      bmd_log = case_when(
+        bmd < bmd.low.bnd * conc_min ~ log10(bmd.low.bnd * conc_min),
+        TRUE ~ bmd_log
+      )
+    )
+  }
+  if (!is.null(bmd.up.bnd)) {
+    httr <- mutate(
+      httr,
+      conc_max = unlist(purrr::map(conc, ~ max(as.numeric(unlist(stringr::str_split(.x, "\\|")))))),
+      bmd_log = case_when(
+        bmd > bmd.up.bnd * conc_max ~ log10(bmd.up.bnd * conc_max),
+        TRUE ~ bmd_log
+      )
+    )
+  }
   return(httr)
 }
 
@@ -357,8 +392,8 @@ filterData <- function(httr, ref, col.type,
     httr.filtered <- httr %>%
       filter(dtxsid %in% unique(ref.filtered$dtxsid) &
         !grepl("Random_", signature)) %>%
-      distinct(dtxsid, signature, .keep_all = TRUE) %>%
-      filter(hitcall > 0.9 & top_over_cutoff > 1.5)
+        distinct(dtxsid, signature, .keep_all = TRUE) %>%
+        filter(hitcall > 0.9 & top_over_cutoff > 1.5)
   } else {
     httr.filtered <- httr %>%
       filter(dtxsid %in% unique(ref.filtered$dtxsid)) %>%

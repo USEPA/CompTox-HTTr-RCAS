@@ -554,6 +554,33 @@ prioritize targeted perturbagens, Tier 2 potency estimates for chemicals with a
 negative Tier 1 outcome and a positive or selective Tier 2 outcome are compared
 to those with a positive or selective Tier 1 outcome via Kruskal-Wallis tests.
 
+```{r compare-mismatch-outcome}
+# get summary of true/false negatives
+combined_sum %>%
+  mutate(
+    outcome_tier2 = case_when(
+      outcome_tier2 != "negative" & n_toxcast_meas < 2 ~ "negative",
+      TRUE ~ outcome_tier2
+    )
+  ) %>%
+  count(source_signature, outcome_tier1, outcome_tier2) %>%
+  ggplot(aes(outcome_tier2, n, fill = outcome_tier1, label = n)) +
+  geom_col(position = position_fill()) +
+  geom_text(position = position_fill(vjust = 0.5)) +
+  facet_wrap(~source_signature, nrow = 1) +
+  labs(
+    x = "Tier 2 Outcome",
+    y = "Proportion of Unique Chemicals",
+    fill = "Tier 1 Outcome"
+  ) +
+  theme_bw() +
+  th
+  # filter(outcome_tier1 == "negative") %>%
+  # mutate(negative_tier1 = ifelse(outcome_tier2 == "negative", "TN", "FN")) %>%
+  # group_by(source_signature, negative_tier1) %>%
+  # summarise(total = sum(n))
+```
+
 ```{r test-mismatch-outcome}
 # test for effect of tier 1 outcome on tier 2-positive/selective chemicals
 mismatch_test <- combined_sum %>%

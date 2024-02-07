@@ -253,14 +253,14 @@ combined_attr <- combined_sum %>%
       TRUE ~ "Positive Only"
     ),
     tier2pos = case_when(
-      tier1sel %in% c("Multiple", unique(combined_sum$source_signature)) & lengths(tier2meas) == 0 ~ "No Orthogonal\nEndpoints",
+      tier1sel %in% c("Multiple", unique(combined_sum$source_signature)) & lengths(tier2meas) == 0 ~ "Insufficient\nOrthogonal Data",
       tier1sel == "Positive Only" | is.na(tier1sel) ~ NA,
       lengths(tier2pos) > 1 ~ "Multiple",
       lengths(tier2pos) == 1 ~ paste(tier2pos),
       TRUE ~ "Negative"
     ),
     tier2sel = case_when(
-      tier2pos == "Negative" | tier2pos == "No Orthogonal\nEndpoints" | is.na(tier2pos) ~ NA,
+      tier2pos == "Negative" | tier2pos == "Insufficient\nOrthogonal Data" | is.na(tier2pos) ~ NA,
       lengths(tier2sel) > 1 ~ "Multiple",
       lengths(tier2sel) == 1 ~ paste(tier2sel),
       TRUE ~ "Positive Only"
@@ -270,7 +270,7 @@ combined_attr <- combined_sum %>%
 # generate color palettes
 labels_attr <- c(
   unique(combined_sum$source_signature),
-  "Multiple", "Profiled", "Negative", "Positive Only", "No Orthogonal\nEndpoints"
+  "Multiple", "Profiled", "Negative", "Positive Only", "Insufficient\nOrthogonal Data"
 )
 fill_attr <- c(
   RColorBrewer::brewer.pal(6, "Dark2")[c(1, 3, 5, 2, 4, 6)],
@@ -296,10 +296,10 @@ counts_attr <- combined_attr %>%
     pct = count / count_x * 100,
     count_label = case_when(
       x == "tier1meas" ~ gettextf("%d\nUnique\nChemicals", count),
-      node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
+      node %in% c("Negative", "Positive Only", "Insufficient\nOrthogonal Data") ~ gettextf(
         "%d\n%s", count, node
       ),
-      # x == "tier2sel" & !node %in% c("Negative", "Positive Only", "No Orthogonal\nEndpoints") ~ gettextf(
+      # x == "tier2sel" & !node %in% c("Negative", "Positive Only", "Insufficient\nOrthogonal Data") ~ gettextf(
       #   "%d Candidates", count
       # ),
       TRUE ~ gettextf("%d", count)
@@ -332,16 +332,18 @@ plot_attr <- combined_attr %>%
     lineheight = 0.8,
     family = "Helvetica"
   ) +
-  geom_segment(
-    aes(x = 4.75, y = -100, xend = 5, yend = -100),
-    arrow = arrow(length = unit(0.005, "npc"), type = "closed"),
+  geom_curve(
+    aes(x = 4.5, y = 0, xend = 4.9, yend = 80),
+    arrow = arrow(length = unit(0.01, "npc"), type = "closed"),
     lineend = "butt",
-    linejoin = "mitre",
+    # linejoin = "mitre",
     color = "navy",
-    linewidth = 2.2
+    linewidth = 0.7,
+    angle = 150,
+    curvature = -0.4
   ) +
   geom_text(
-    aes(x = 5, y = -100, label = "Prioritized for\nTargeted Assays"),
+    aes(x = 5, y = 80, label = "Prioritized for\nProspective\nProfiling"),
     color = "navy",
     size = 2.5,
     hjust = 0,
@@ -459,18 +461,15 @@ for (sig in unique(combined_sum$source_signature)) {
 ```{r visualize-outcome-associations, class.source = 'fold-hide', fig.width=6, fig.height=3}
 # visualize odds ratios
 plot_or <- rbind(
-  mutate(or_positive, comparison = "Positive Only"),
-  mutate(or_selective, comparison = "Positive + Selective")
+  mutate(or_positive, comparison = "All Positive Chemicals"),
+  mutate(or_selective, comparison = "Positive + Selective Chemicals")
 ) %>%
   mutate(
     comparison = factor(
-      comparison, levels = c("Positive Only", "Positive + Selective")
+      comparison, levels = c("All Positive Chemicals", "Positive + Selective Chemicals")
     ),
-    p_label = ifelse(
-      p.value < 1E-3,
-      paste0("p = ", formatC(p.value, format = "e", digits = 2)),
-      paste0("p = ", (as.character(signif(p.value, 2))))
-    )
+    p_label = ifelse(p.value < 0.05, "*", ""),
+    p_x = ifelse(estimate < 30, conf.high + (0.4 * conf.high), conf.low - (0.4 * conf.low))
   ) %>%
   ggplot() +
   geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
@@ -478,12 +477,10 @@ plot_or <- rbind(
     aes(y = source_signature, xmin = conf.low, xmax = conf.high),
     width = 0.2
   ) +
-  # geom_text(
-  #   aes(y = source_signature, x = conf.high + 1, label = p_label),
-  #   color = "grey30",
-  #   angle = 270,
-  #   size = 2.5, 
-  # ) +
+  geom_text(
+    aes(y = source_signature, x = p_x, label = p_label),
+    size = 5, nudge_y = -0.1, family = "Helvetica"
+  ) +
   geom_point(aes(estimate, source_signature), color = "red", size = 2) +
   scale_x_log10() +
   scale_y_discrete(limits = rev) +
@@ -538,7 +535,7 @@ plot_fig2 <- cowplot::plot_grid(
   #   nrow = 1, rel_widths = c(0.3, 1, 0.2, 0.3)
   # ),
   nrow = 3,
-  rel_heights = c(0.7, 1.3, 0.7),
+  rel_heights = c(0.7, 1.4, 0.8),
   # align = "h",
   # axis = "lrtb",
   labels = c("A", "B", "C"),
@@ -546,7 +543,7 @@ plot_fig2 <- cowplot::plot_grid(
 )
 ggsave(
   paste0(dir_home, "output/Fig2.png"), plot_fig2,
-  width = 1000, height = 1200, units = "px", scale = 2, bg = "white"
+  width = 1000, height = 1400, units = "px", scale = 2, bg = "white"
 )
 ```
 

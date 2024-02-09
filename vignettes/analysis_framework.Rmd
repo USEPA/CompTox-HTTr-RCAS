@@ -17,7 +17,7 @@ framework to prioritize chemicals that perturb key molecular targets.
 
 Chemicals are screened in Tier 1 using
 [Reference Class Associated Signatures (RCAS)](analysis_RCAS.html),
-initially for bioactivity (Tier 1-Positive) and additionally for selectivity
+initially for bioactivity (Tier 1-Active) and additionally for selectivity
 versus non-targeted transcriptional responses (Tier 1-Selective). Chemicals
 with sufficient evidence of targeted behavior in Tier 1 are advanced
 to confirmatory Tier 2 assays from the
@@ -250,11 +250,11 @@ combined_attr <- combined_sum %>%
       tier1pos == "Negative" ~ NA,
       lengths(tier1sel) > 1 ~ "Multiple",
       lengths(tier1sel) == 1 ~ paste(tier1sel),
-      TRUE ~ "Positive Only"
+      TRUE ~ "Active Only"
     ),
     tier2pos = case_when(
       tier1sel %in% c("Multiple", unique(combined_sum$source_signature)) & lengths(tier2meas) == 0 ~ "Insufficient\nOrthogonal Data",
-      tier1sel == "Positive Only" | is.na(tier1sel) ~ NA,
+      tier1sel == "Active Only" | is.na(tier1sel) ~ NA,
       lengths(tier2pos) > 1 ~ "Multiple",
       lengths(tier2pos) == 1 ~ paste(tier2pos),
       TRUE ~ "Negative"
@@ -263,14 +263,14 @@ combined_attr <- combined_sum %>%
       tier2pos == "Negative" | tier2pos == "Insufficient\nOrthogonal Data" | is.na(tier2pos) ~ NA,
       lengths(tier2sel) > 1 ~ "Multiple",
       lengths(tier2sel) == 1 ~ paste(tier2sel),
-      TRUE ~ "Positive Only"
+      TRUE ~ "Active Only"
     )
   )
 
 # generate color palettes
 labels_attr <- c(
   unique(combined_sum$source_signature),
-  "Multiple", "Profiled", "Negative", "Positive Only", "Insufficient\nOrthogonal Data"
+  "Multiple", "Profiled", "Negative", "Active Only", "Insufficient\nOrthogonal Data"
 )
 fill_attr <- c(
   RColorBrewer::brewer.pal(6, "Dark2")[c(1, 3, 5, 2, 4, 6)],
@@ -296,10 +296,10 @@ counts_attr <- combined_attr %>%
     pct = count / count_x * 100,
     count_label = case_when(
       x == "tier1meas" ~ gettextf("%d\nUnique\nChemicals", count),
-      node %in% c("Negative", "Positive Only", "Insufficient\nOrthogonal Data") ~ gettextf(
+      node %in% c("Negative", "Active Only", "Insufficient\nOrthogonal Data") ~ gettextf(
         "%d\n%s", count, node
       ),
-      # x == "tier2sel" & !node %in% c("Negative", "Positive Only", "Insufficient\nOrthogonal Data") ~ gettextf(
+      # x == "tier2sel" & !node %in% c("Negative", "Active Only", "Insufficient\nOrthogonal Data") ~ gettextf(
       #   "%d Candidates", count
       # ),
       TRUE ~ gettextf("%d", count)
@@ -360,10 +360,10 @@ plot_attr <- combined_attr %>%
   ) +
   scale_x_discrete(labels = c(
     "Tier 1\nProfiled",
-    "Tier 1\nPositive",
-    "Tier 1\nPositive + Selective",
-    "Tier 2\nPositive",
-    "Tier 2\nPositive + Selective"
+    "Tier 1\nActive",
+    "Tier 1\nActive + Selective",
+    "Tier 2\nActive",
+    "Tier 2\nActive + Selective"
   )) +
   coord_cartesian(clip = "off") +
   labs(x = "", fill = "RCAS") +
@@ -461,12 +461,12 @@ for (sig in unique(combined_sum$source_signature)) {
 ```{r visualize-outcome-associations, class.source = 'fold-hide', fig.width=6, fig.height=3}
 # visualize odds ratios
 plot_or <- rbind(
-  mutate(or_positive, comparison = "All Positive Chemicals"),
-  mutate(or_selective, comparison = "Positive + Selective Chemicals")
+  mutate(or_positive, comparison = "All Active Chemicals"),
+  mutate(or_selective, comparison = "Active + Selective Chemicals")
 ) %>%
   mutate(
     comparison = factor(
-      comparison, levels = c("All Positive Chemicals", "Positive + Selective Chemicals")
+      comparison, levels = c("All Active Chemicals", "Active + Selective Chemicals")
     ),
     p_label = ifelse(p.value < 0.05, "*", ""),
     p_x = ifelse(estimate < 30, conf.high + (0.4 * conf.high), conf.low - (0.4 * conf.low))
@@ -519,6 +519,7 @@ plot_or <- rbind(
 #   plot_or, plot_pval, nrow = 1, rel_widths = c(1, 0.2)
 # )
 # plot_or_all
+plot_or
 ```
 
 ```{r plot-fig2, class.source = 'fold-hide'}
@@ -654,13 +655,13 @@ plot_mismatch_pos <- combined_sum %>%
   ) %>%
   mutate(
     outcome_tier1_label = case_when(
-      outcome_tier1 == "positive" ~ "Positive Only",
-      outcome_tier1 == "selective" ~ "Positive + Selective",
+      outcome_tier1 == "positive" ~ "Active Only",
+      outcome_tier1 == "selective" ~ "Active + Selective",
       outcome_tier1 == "negative" ~ "Negative"
     ),
     outcome_tier1_label = factor(
       outcome_tier1_label,
-      levels = c("Negative", "Positive Only", "Positive + Selective")
+      levels = c("Negative", "Active Only", "Active + Selective")
     )
   ) %>%
   ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
@@ -683,7 +684,7 @@ plot_mismatch_pos <- combined_sum %>%
   scale_x_continuous(limits = tier2_lim) +
   labs(
     x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
-    title = "Tier 2 Positive Only"
+    title = "Tier 2 Active Only"
   ) +
   theme_bw() +
   th +
@@ -697,13 +698,13 @@ plot_mismatch_sel <- combined_sum %>%
   ) %>%
   mutate(
     outcome_tier1_label = case_when(
-      outcome_tier1 == "positive" ~ "Positive Only",
-      outcome_tier1 == "selective" ~ "Positive + Selective",
+      outcome_tier1 == "positive" ~ "Active Only",
+      outcome_tier1 == "selective" ~ "Active + Selective",
       outcome_tier1 == "negative" ~ "Negative"
     ),
     outcome_tier1_label = factor(
       outcome_tier1_label,
-      levels = c("Negative", "Positive Only", "Positive + Selective")
+      levels = c("Negative", "Active Only", "Active + Selective")
     )
   ) %>%
   ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
@@ -726,7 +727,7 @@ plot_mismatch_sel <- combined_sum %>%
   scale_x_continuous(limits = tier2_lim) +
   labs(
     x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
-    title = "Tier 2 Positive + Selective"
+    title = "Tier 2 Active + Selective"
   ) +
   theme_bw() +
   th +
@@ -805,16 +806,16 @@ calcCor <- function(combined_sum, col_compare, tier2 = FALSE) {
     cor_rcas <- mutate(
       cor_rcas,
       outcome_label = case_when(
-        outcome_tier2 == "selective" ~ "Positive + Selective",
-        TRUE ~ "Positive Only"
+        outcome_tier2 == "selective" ~ "Active + Selective",
+        TRUE ~ "Active Only"
       )
     )
   } else {
     cor_rcas <- mutate(
       cor_rcas,
       outcome_label = case_when(
-        outcome_tier1 == "selective" ~ "Positive + Selective",
-        TRUE ~ "Positive Only"
+        outcome_tier1 == "selective" ~ "Active + Selective",
+        TRUE ~ "Active Only"
       )
     )
   }
@@ -846,16 +847,16 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
     ) %>%
       mutate(
         outcome_label = case_when(
-          outcome_tier2 == "selective" ~ "Positive + Selective",
-          TRUE ~ "Positive Only"
+          outcome_tier2 == "selective" ~ "Active + Selective",
+          TRUE ~ "Active Only"
         )
       )
   } else {
     combined_filt <- filter(combined_sum, outcome_tier1 != "negative") %>%
       mutate(
         outcome_label = case_when(
-          outcome_tier1 == "selective" ~ "Positive + Selective",
-          TRUE ~ "Positive Only"
+          outcome_tier1 == "selective" ~ "Active + Selective",
+          TRUE ~ "Active Only"
         )
       )
   }
@@ -869,12 +870,12 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
     ) +
     geom_abline(slope = 1, intercept = 0, color = "grey50") +
     geom_text(
-      data = filter(cor_rcas, outcome_label == "Positive Only"),
+      data = filter(cor_rcas, outcome_label == "Active Only"),
       aes(label = cor_label),
       x = -1.8, y = 2.5, show.legend = FALSE, family = "Helvetica"
     ) +
     geom_text(
-      data = filter(cor_rcas, outcome_label == "Positive + Selective"),
+      data = filter(cor_rcas, outcome_label == "Active + Selective"),
       aes(label = cor_label),
       x = -1.8, y = 1.8, show.legend = FALSE, family = "Helvetica"
     ) +
@@ -1039,7 +1040,8 @@ plotCandidates <- function(combined_proc) {
       segment.curvature = 0.4,
       segment.ncp = 3,
       segment.angle = 20,
-      segment.linetype = 3
+      segment.linetype = 3,
+      family = "Helvetica"
     ) +
     scale_color_manual(
       values = c(
@@ -1053,7 +1055,7 @@ plotCandidates <- function(combined_proc) {
     ) +
     # facet_wrap(~source_signature, nrow = 1) +
     labs(
-      x = "", y = "log10(POD)",
+      x = "", y = expression(log[10](POD)),
       shape = "Metric", color = "Chemical Type"
     ) +
     theme_bw() +

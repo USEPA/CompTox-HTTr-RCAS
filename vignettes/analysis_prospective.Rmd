@@ -439,7 +439,7 @@ prospective assays to assess the relative sensitivity of each tiered result.
 ```{r analyze-potency}
 # visualize trends between potency estimates
 sum_potency <- combined_prosp %>%
-  filter(outcome_prosp == "Positive") %>%
+  filter(outcome_prosp == "Active") %>%
   mutate(acc_log = log10(acc), diff_sq = (bmd_log - acc_log) ** 2) %>%
   summarise(
     rmsd = sqrt(mean(diff_sq)),
@@ -455,7 +455,7 @@ annot_potency <- paste0(
 )
 
 plot_potency <- combined_prosp %>%
-  filter(outcome_prosp == "Positive") %>%
+  filter(outcome_prosp == "Active") %>%
   mutate(
     acc_log = log10(acc),
     reference_type = case_when(
@@ -502,7 +502,7 @@ per assay.
 
 ```{r analyze-correlation}
 cor_potency <- combined_prosp %>%
-  filter(outcome_prosp == "Positive") %>%
+  filter(outcome_prosp == "Active") %>%
   mutate(
     acc_log = log10(acc),
     target_f = factor(
@@ -561,6 +561,29 @@ ggsave(
 ```
 
 # Reproducibility
+
+```{r export-prospective}
+# export chemicals with tier 1 active+selective outcome and insufficient
+# orthogonal data in ToxCast (Table S3)
+
+export_prosp <- combined_sum %>%
+  filter(outcome_tier1 == "selective" & n_toxcast_meas < 2) %>%
+  select(
+    source_signature, dtxsid, name, bmd_log,
+    threshold_1sd, outcome_tier1, n_toxcast_meas
+  ) %>%
+  arrange(source_signature, bmd_log) %>%
+  mutate(
+    profiled_endpoint = case_when(
+      dtxsid %in% fit_all$dtxsid ~ fit_all$aenm[match(dtxsid, fit_all$dtxsid)]
+    )
+  )
+colnames(export_prosp) <- c(
+  "rcas", "dtxsid", "name", "rcas_bmd_log",
+  "ns1_log", "outcome_tier1", "n_toxcast_meas", "profiled_endpoint"
+)
+openxlsx::write.xlsx(export_prosp, "output/TableS2.xlsx")
+```
 
 ```{r reproducibility}
 sessionInfo()

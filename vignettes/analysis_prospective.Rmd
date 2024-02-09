@@ -379,19 +379,22 @@ plot_class <- combined_prosp %>%
     n_sum = sum(n),
     prop = n / n_sum,
     prop_label = case_when(
-      prop > 0 ~ paste0(n, " (", round(prop * 100), "%)"),
+      prop > 0 ~ paste0(n, "\n(", round(prop * 100), "%)"),
       TRUE ~ ""
     )
   ) %>%
-  ggplot(aes(x = "", y = prop, fill = outcome_prosp, label = prop_label)) +
-  geom_col(color = "black") +
-  coord_polar(theta = "y") +
-  geom_text(position = position_stack(vjust = 0.5), family = "Helvetica") +
-  facet_wrap(~target_f, nrow = 3) +
+  ggplot(aes(x = target_f, y = n, fill = outcome_prosp, label = prop_label)) +
+  # geom_col(color = "black") +
+  # coord_polar(theta = "y") +
+  # geom_text(position = position_stack(vjust = 0.5), family = "Helvetica") +
+  # facet_wrap(~target_f, nrow = 3) +
+  geom_col(position = position_fill()) +
+  geom_text(position = position_fill(vjust = 0.5)) +
   scale_fill_brewer(palette = "Set2") +
   # scale_color_manual(values = c("black", "white")) +
-  labs(x = "", y = "", fill = "Assay\nOutcome") +
-  theme_void() +
+  labs(x = "Target", y = "Proportion of Chemicals", fill = "Assay\nOutcome") +
+  # theme_void() +
+  theme_bw() +
   th
 
 plot_class
@@ -404,13 +407,29 @@ prospective assays to assess the relative sensitivity of each tiered result.
 
 ```{r analyze-potency}
 # visualize trends between potency estimates
+sum_potency <- combined_prosp %>%
+  filter(outcome_prosp == "Positive") %>%
+  mutate(acc_log = log10(acc), diff_sq = (bmd_log - acc_log) ** 2) %>%
+  summarise(
+    rmsd = sqrt(mean(diff_sq)),
+    cor_coef = cor.test(bmd_log, acc_log)$estimate,
+    cor_p = cor.test(bmd_log, acc_log)$p.value
+  ) %>%
+  mutate(across(everything(), ~ ifelse(
+    .x < 1E-3, formatC(.x, digits = 2, format = "e"), formatC(.x, digits = 3)
+  )))
+annot_potency <- paste0(
+  "RMSD = ", sum_potency$rmsd, "\n",
+  "r = ", sum_potency$cor_coef, "*"
+)
+
 plot_potency <- combined_prosp %>%
   filter(outcome_prosp == "Positive") %>%
   mutate(
     acc_log = log10(acc),
     reference_type = case_when(
       reference_type == "None" ~ "Test Chemical",
-      TRUE ~ "Positive Reference\nChemical"
+      TRUE ~ "Positive\nReference\nChemical"
     ),
     target_f = factor(
       assay_target, levels = c("AHR", "hERG", "RARg", "RXRb", "GR")
@@ -428,7 +447,13 @@ plot_potency <- combined_prosp %>%
     slope = 1, intercept = c(-0.5, 0.5), color = "grey30", linetype = "dashed"
   ) +
   geom_point(size = 2) +
-  geom_text_repel(min.segment.length = 0, size = 2.4, max.overlaps = 5, box.padding = 0.28) +
+  geom_text_repel(
+    min.segment.length = 0, size = 2.4, max.overlaps = 5, box.padding = 0.28,
+    family = "Helvetica"
+  ) +
+  annotate(
+    "text", x = 1.5, y = -2.5, label = annot_potency, family = "Helvetica"
+  ) +
   scale_shape_manual(values = c(3, 16, 4)) +
   labs(
     x = expression(log[10](POD[RCAS])),
@@ -489,16 +514,18 @@ plot_cor <- cor_potency %>%
 # combine individual plots into single figure (Fig. 6)
 plot_all <- cowplot::plot_grid(
   plot_class,
-  cowplot::plot_grid(
-    NULL, plot_potency, plot_cor,
-    ncol = 1, labels = c("B", "", "C"), rel_heights = c(0.2, 1, 0.8),
-    label_fontfamily = "Helvetica"
-  ),
-  labels = c("A", ""), ncol = 2, label_fontfamily = "Helvetica"
+  # cowplot::plot_grid(
+  #   NULL, plot_potency, plot_cor,
+  #   ncol = 1, labels = c("B", "", "C"), rel_heights = c(0.2, 1, 0.8),
+  #   label_fontfamily = "Helvetica"
+  # ),
+  plot_potency,
+  align = "v", axis = "tblr",
+  labels = c("A", "B"), nrow = 2, label_fontfamily = "Helvetica"
 )
 ggsave(
   paste0(dir_home, "output/Fig6.png"), plot_all,
-  width = 1400, height = 960, units = "px", scale = 2, bg = "white"
+  width = 720, height = 960, units = "px", scale = 2, bg = "white"
 )
 ```
 

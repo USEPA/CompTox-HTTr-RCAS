@@ -174,6 +174,35 @@ composite_all %>%
   DT::datatable()
 ```
 
+## Compare reference chemicals used for RCAS generation
+
+```{r refchem-rcas}
+# combine u2os + heparg lists of refchems used in rcas
+refchem_heparg <- composite_heparg$httr.wide %>%
+  select(name, dtxsid, ref_class) %>%
+  mutate(source = "heparg")
+refchem_u2os <- composite_u2os$httr.wide %>%
+  select(name, dtxsid, ref_class) %>%
+  mutate(source = "u2os")
+
+combined_refchem <- rbind(refchem_heparg, refchem_u2os)
+
+# summarize reference chemicals by cell line and target
+plot_refchem <- combined_refchem %>%
+  count(source, ref_class) %>%
+  ggplot(aes(n, reorder(ref_class, n), label = n)) +
+  geom_col(color = "white") +
+  geom_text(nudge_x = 1, family = "Helvetica") +
+  facet_wrap(~source) +
+  labs(x = "Number of Reference Chemicals", y = "Molecular Target") +
+  theme_bw() +
+  th
+ggsave(
+  "output/FigS1.png", plot_refchem,
+  width = 960, height = 720, units = "px", scale = 2, bg = "white"
+)
+```
+
 ## Compare RCAS gene-level potency estimates
 
 ```{r ht-fcn, class.source = 'fold-hide'}

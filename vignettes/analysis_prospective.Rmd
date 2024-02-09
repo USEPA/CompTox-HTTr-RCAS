@@ -400,6 +400,37 @@ plot_class <- combined_prosp %>%
 plot_class
 ```
 
+### Compare to Hit Rates from Retrospective Analysis
+
+To compare the rates of RCAS-predicted active/selective chemicals that were
+active in prospective screening, hit rates from Tier 1 active/selective
+chemicals in Tier 2 ToxCast endpoints are calculated from the retrospective
+framework analysis.
+
+```{r hit-rates-retrospective}
+# plot hit rates of RCAS-predicted chemicals in Tier 2 orthogonal endpoints
+plot_hitr <- combined_sum %>%
+  filter(n_toxcast_meas >= 2 & outcome_tier1 == "selective") %>%
+  count(source_signature, tier2_positive) %>%
+  group_by(source_signature) %>%
+  mutate(prop = n / sum(n), prop_label = paste0(n, "\n(", round(prop * 100), "%)")) %>%
+  ungroup() %>%
+  ggplot(aes(source_signature, n, fill = tier2_positive, label = prop_label)) +
+  geom_col(position = position_fill()) +
+  geom_text(position = position_fill(vjust = 0.5), family = "Helvetica") +
+  labs(
+    x = "RCAS", y = "Proportion of Chemicals",
+    fill = "Active in Tier 2\nOrthogonal\nEndpoint"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 270, vjust = 0.5, hjust = 0)) +
+  th
+ggsave(
+  "output/FigS6.png", plot_hitr,
+  width = 720, height = 720, units = "px", scale = 2, bg = "white"
+)
+```
+
 ## Sensitivity of Potency Estimates
 
 Tier 1 RCAS-derived PODs (`bmd_log`) are compared to potency values from

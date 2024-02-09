@@ -348,7 +348,7 @@ combined_prosp <- fit_all %>%
       grepl("RXRB", aenm) ~ "RXRb"
     ),
     outcome_prosp = ifelse(
-      hitcall >= 0.9 & top_over_cutoff >= 1, "Positive", "Negative"
+      hitcall >= 0.9 & top_over_cutoff >= 1, "Active", "Inactive"
     )
   ) %>%
   select(
@@ -390,7 +390,7 @@ plot_class <- combined_prosp %>%
   # facet_wrap(~target_f, nrow = 3) +
   geom_col(position = position_fill()) +
   geom_text(position = position_fill(vjust = 0.5)) +
-  scale_fill_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2", direction = -1) +
   # scale_color_manual(values = c("black", "white")) +
   labs(x = "Target", y = "Proportion of Chemicals", fill = "Assay\nOutcome") +
   # theme_void() +

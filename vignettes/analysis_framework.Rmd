@@ -1157,6 +1157,59 @@ plots_candidate_struct
 
 # Reproducibility
 
+```{r export-or}
+# compile odds ratios and chemical totals for export
+totals_positive <- assoc_positive$tbls %>%
+  select(source_signature, tier1_positive, tier2_positive, .observed) %>%
+  mutate(
+    across(c(tier1_positive, tier2_positive), as.logical),
+    tier1_positive = case_when(tier1_positive ~ "pass", !tier1_positive ~ "fail"),
+    tier2_positive = case_when(tier2_positive ~ "pass", !tier2_positive ~ "fail"),
+    comparison = "All Active Chemicals"
+  ) %>%
+  pivot_wider(
+    names_from = c(tier1_positive, tier2_positive),
+    values_from = .observed
+  ) %>%
+  rename(
+    total_neither = fail_fail,
+    total_tier1_only = pass_fail,
+    total_tier2_only = fail_pass,
+    total_both = pass_pass
+  )
+
+totals_selective <- assoc_selective$tbls %>%
+  select(source_signature, tier1_selective, tier2_selective, .observed) %>%
+  mutate(
+    across(c(tier1_selective, tier2_selective), as.logical),
+    tier1_selective = case_when(tier1_selective ~ "pass", !tier1_selective ~ "fail"),
+    tier2_selective = case_when(tier2_selective ~ "pass", !tier2_selective ~ "fail"),
+    comparison = "Active + Selective Chemicals"
+  ) %>%
+  pivot_wider(
+    names_from = c(tier1_selective, tier2_selective),
+    values_from = .observed
+  ) %>%
+  rename(
+    total_neither = fail_fail,
+    total_tier1_only = pass_fail,
+    total_tier2_only = fail_pass,
+    total_both = pass_pass
+  )
+
+totals_combined <- rbind(totals_positive, totals_selective)
+or_combined <- rbind(
+  mutate(or_positive, comparison = "All Active Chemicals"),
+  mutate(or_selective, comparison = "Active + Selective Chemicals")
+)
+totals_combined <- left_join(
+  totals_combined, or_combined, by = c("source_signature", "comparison")
+) %>%
+  rename(rcas = source_signature) %>%
+  select(-c(method, alternative))
+openxlsx::write.xlsx(totals_combined, "output/TableS2.xlsx")
+```
+
 ```{r reproducibility}
 sessionInfo()
 ```

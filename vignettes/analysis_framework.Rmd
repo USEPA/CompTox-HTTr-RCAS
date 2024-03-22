@@ -774,12 +774,16 @@ calcCor <- function(combined_sum, col_compare, tier2 = FALSE) {
       filter(
         n_toxcast_meas >= 2 &
         outcome_tier1 == "selective" &
-        outcome_tier2 != "negative"
+        outcome_tier2 != "negative" &
+        specific_crit_2 == "median_bioactive"
       ) %>%
       group_by(source_signature, outcome_tier2)
   } else {
     combined_filt <- combined_sum %>%
-      filter(outcome_tier1 != "negative") %>%
+      filter(
+        outcome_tier1 != "negative" &
+        specific_crit_1 == "median_bioactive"
+      ) %>%
       group_by(source_signature, outcome_tier1)
   }
   cor_rcas <- combined_filt %>%
@@ -843,7 +847,8 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
       combined_sum,
       n_toxcast_meas >= 2 &
       outcome_tier1 == "selective" &
-      outcome_tier2 != "negative"
+      outcome_tier2 != "negative" &
+      specific_crit_2 == "median_bioactive"
     ) %>%
       mutate(
         outcome_label = case_when(
@@ -852,7 +857,11 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
         )
       )
   } else {
-    combined_filt <- filter(combined_sum, outcome_tier1 != "negative") %>%
+    combined_filt <- filter(
+      combined_sum,
+      outcome_tier1 != "negative" &
+      specific_crit_1 == "median_bioactive"
+    ) %>%
       mutate(
         outcome_label = case_when(
           outcome_tier1 == "selective" ~ "Active + Selective",

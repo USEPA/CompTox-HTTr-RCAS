@@ -616,7 +616,7 @@ mismatch_contr <- combined_sum %>%
   mutate(
     rs = purrr::map(
       data, ~ pairwise.wilcox.test(
-        .x$modl_acc, .x$outcome_tier1,  p.adjust.method = "BH"
+        .x$modl_acc, .x$tier1_positive,  p.adjust.method = "BH"
       )
     ),
     rs_df = purrr::map(rs, broom::tidy)
@@ -626,7 +626,7 @@ mismatch_contr <- combined_sum %>%
 
 # visualize differences in potency across tier 2-selective only chemicals
 contr_pos <- mismatch_contr %>%
-  filter(!tier2_selective & group2 == "negative") %>%
+  filter(!tier2_selective & group2 == "FALSE") %>%
   arrange(source_signature, group1) %>%
   mutate(p_label = case_when(
     p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
@@ -636,7 +636,7 @@ contr_pos <- mismatch_contr %>%
 
 # repeat for tier 2-selective chemicals
 contr_sel <- mismatch_contr %>%
-  filter(tier2_selective & group2 == "negative") %>%
+  filter(tier2_selective & group2 == "FALSE") %>%
   arrange(source_signature, group1) %>%
   mutate(p_label = case_when(
     p.value < 0.001 ~ formatC(p.value, format = "e", digits = 2),
@@ -655,13 +655,14 @@ plot_mismatch_pos <- combined_sum %>%
   ) %>%
   mutate(
     outcome_tier1_label = case_when(
-      outcome_tier1 == "positive" ~ "Active Only",
-      outcome_tier1 == "selective" ~ "Active + Selective",
+      outcome_tier1 %in% c("positive", "selective") ~ "Active",
+      # outcome_tier1 == "selective" ~ "Active + Selective",
       outcome_tier1 == "negative" ~ "Negative"
     ),
     outcome_tier1_label = factor(
       outcome_tier1_label,
-      levels = c("Negative", "Active Only", "Active + Selective")
+      # levels = c("Negative", "Active Only", "Active + Selective")
+      levels = c("Negative", "Active")
     )
   ) %>%
   ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
@@ -671,10 +672,12 @@ plot_mismatch_pos <- combined_sum %>%
     position = position_jitterdodge(jitter.width = 0.1)
   ) +
   geom_signif(
-    # y_position = c(3, 3.6, 3, 3.6, 3, 3.6),
-    y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 3.4),
-    xmin = c(0.7, 0.7, 1.7, 1.7, 3.7, 3.7),
-    xmax = c(1, 1.3, 2, 2.3, 4, 4.3),
+    # y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 3.4),
+    y_position = c(2.8, 2.8, 2.8),
+    # xmin = c(0.7, 0.7, 1.7, 1.7, 3.7, 3.7),
+    xmin = c(0.8, 1.8, 3.8),
+    # xmax = c(1, 1.3, 2, 2.3, 4, 4.3),
+    xmax = c(1.2, 2.2, 4.2),
     annotation = contr_pos,
     tip_length = 0.01,
     color = "grey30",
@@ -698,13 +701,14 @@ plot_mismatch_sel <- combined_sum %>%
   ) %>%
   mutate(
     outcome_tier1_label = case_when(
-      outcome_tier1 == "positive" ~ "Active Only",
-      outcome_tier1 == "selective" ~ "Active + Selective",
+      outcome_tier1 %in% c("positive", "selective") ~ "Active",
+      # outcome_tier1 == "selective" ~ "Active + Selective",
       outcome_tier1 == "negative" ~ "Negative"
     ),
     outcome_tier1_label = factor(
       outcome_tier1_label,
-      levels = c("Negative", "Active Only", "Active + Selective")
+      # levels = c("Negative", "Active Only", "Active + Selective")
+      levels = c("Negative", "Active")
     )
   ) %>%
   ggplot(aes(modl_acc, source_signature, color = outcome_tier1_label)) +
@@ -714,10 +718,12 @@ plot_mismatch_sel <- combined_sum %>%
     position = position_jitterdodge(jitter.width = 0.1)
   ) +
   geom_signif(
-    # y_position = c(3, 3.6, 3, 3.6, 3, 3, 3.6),
-    y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 2.8, 3.4),
-    xmin = c(0.7, 0.7, 1.7, 1.7, 2.8, 3.7, 3.7),
-    xmax = c(1, 1.3, 2, 2.3, 3.2, 4, 4.3),
+    # y_position = c(2.8, 3.4, 2.8, 3.4, 2.8, 2.8, 3.4),
+    y_position = c(2.8, 2.8, 2.8, 2.8),
+    # xmin = c(0.7, 0.7, 1.7, 1.7, 2.8, 3.7, 3.7),
+    xmin = c(0.7, 1.8, 2.8, 3.8),
+    # xmax = c(1, 1.3, 2, 2.3, 3.2, 4, 4.3),
+    xmax = c(1.2, 2.2, 3.2, 4.2),
     annotation = contr_sel,
     tip_length = 0.01,
     color = "grey30",

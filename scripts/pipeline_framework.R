@@ -128,16 +128,19 @@ runFramework <- function(
     )
     compare_tier2 <- combineTier2(chems_match_rcas, mc5_burst_rcas)
     compare_full <- compare_tier1 %>%
+        rename(specific_crit_1 = specific_crit) %>%
         select(
-            dtxsid, name, signature, signature_label, bmd_log, bmd_log_5, bmd_log_med,
-            bmd_log_mode, threshold_1sd, tier1_positive, tier1_selective_1sd
+            dtxsid, name, signature, signature_label, bmd_log, specific_crit_1,
+            bmd_log_5, bmd_log_med, bmd_log_mode, threshold_1sd, tier1_positive,
+            tier1_selective_1sd
         ) %>%
         full_join(
             ., select(
-                compare_tier2,
+                rename(compare_tier2, specific_crit_2 = specific_crit),
                 dsstox_substance_id, chnm, n_toxcast_meas, aeid, aenm, hitc,
-                use.me, modl_acc, specific_crit, modl_acc_mode, modl_acc_sd, modl_acc_5,
-                tier2_positive, tier2_selective, tier2_conflict, signature
+                use.me, modl_acc, specific_crit_2, modl_acc_mode, modl_acc_sd,
+                modl_acc_5, tier2_positive, tier2_selective, tier2_conflict,
+                signature
             ),
             by = c(
                 "dtxsid" = "dsstox_substance_id",
@@ -159,9 +162,9 @@ runFramework <- function(
                 c(
                     name, chnm, bmd_log, bmd_log_5, bmd_log_med, bmd_log_mode,
                     threshold_1sd, tier1_positive, tier1_selective,
-                    n_toxcast_meas, modl_acc_5
+                    n_toxcast_meas, modl_acc_5, specific_crit_1, specific_crit_2
                 ),
-                unique
+                ~ unique(.x[!is.na(.x)])
             ),
             across(c(modl_acc, modl_acc_mode, modl_acc_sd), ~ min(.x, na.rm = TRUE)),
             across(c(tier2_positive, tier2_selective, tier2_conflict), any),

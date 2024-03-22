@@ -424,11 +424,11 @@ assoc_positive <- list(test = data.frame(), tbls = data.frame())
 or_positive <- data.frame()
 for (sig in unique(combined_sum$source_signature)) {
   assoc <- combined_sum %>%
-    filter(source_signature == sig) %>%
+    filter(source_signature == sig & n_toxcast_meas >= 2) %>%
     distinct(dtxsid, tier2_positive, .keep_all = TRUE) %>%
     calcFisher(., "tier1_positive", "tier2_positive")
   or <- combined_sum %>%
-    filter(source_signature == sig) %>%
+    filter(source_signature == sig & n_toxcast_meas >= 2) %>%
     distinct(dtxsid, tier2_positive, .keep_all = TRUE) %>%
     calcOdds(., "tier1_positive", "tier2_positive")
   if (sig != "heparg_hERG_Inhibitor") {
@@ -443,11 +443,11 @@ assoc_selective <- list(test = data.frame(), tbls = data.frame())
 or_selective <- data.frame()
 for (sig in unique(combined_sum$source_signature)) {
   assoc <- combined_sum %>%
-    filter(source_signature == sig) %>%
+    filter(source_signature == sig & n_toxcast_meas >= 2) %>%
     distinct(dtxsid, tier2_selective, .keep_all = TRUE) %>%
     calcFisher(., "tier1_selective", "tier2_selective")
   or <- combined_sum %>%
-    filter(source_signature == sig) %>%
+    filter(source_signature == sig & n_toxcast_meas >= 2) %>%
     distinct(dtxsid, tier2_selective, .keep_all = TRUE) %>%
     calcOdds(., "tier1_selective", "tier2_selective")
   if (sig != "heparg_hERG_Inhibitor") {

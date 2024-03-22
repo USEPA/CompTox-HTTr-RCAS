@@ -704,6 +704,24 @@ df.randomp %>%
 
 # Reproducibility
 
+```{r export-refchems}
+# filter refchems for targets in rcas + export to file (Table S1)
+refchem_export <- composite_heparg$ref %>%
+  filter(
+    ref_class %in% unique(c(
+      unique(composite_heparg$httr.wide$ref_class),
+      unique(composite_u2os$httr.wide$ref_class)
+    ))
+  ) %>%
+  mutate(
+    in_httr = dtxsid %in% unique(c(
+      unique(composite_heparg$httr.wide$dtxsid),
+      unique(composite_u2os$httr.wide$dtxsid)
+    ))
+  )
+openxlsx::write.xlsx(refchem_export, "output/TableS1.xlsx")
+```
+
 ```{r reproducibility}
 sessionInfo()
 ```

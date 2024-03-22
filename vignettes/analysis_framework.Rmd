@@ -683,7 +683,7 @@ plot_mismatch_pos <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Outcome",
     title = "Tier 2 Active Only"
   ) +
   theme_bw() +
@@ -726,7 +726,7 @@ plot_mismatch_sel <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[Orthogonal])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Outcome",
     title = "Tier 2 Active + Selective"
   ) +
   theme_bw() +
@@ -910,7 +910,7 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
 }
 
 plot_bpac <- plotPods(combined_sum, cor_bpac, "bmd_log_5", "BPAC1")
-plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "Orthogonal", tier2 = TRUE)
+plot_tier2 <- plotPods(combined_sum, cor_tier2, "modl_acc", "ortho", tier2 = TRUE)
 
 # combine plots
 guide_or <- guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
@@ -1060,7 +1060,7 @@ plotCandidates <- function(combined_proc) {
     ) +
     scale_shape_manual(
       values = c(4, 16, 21),
-      labels = expression(POD[RCAS], POD[Orthogonal], POD[`NS2`])
+      labels = expression(POD[RCAS], POD[ortho], POD[`NS2`])
     ) +
     # facet_wrap(~source_signature, nrow = 1) +
     labs(

@@ -233,7 +233,7 @@ compared across molecular targets/cell lines using a Sankey plot.
 combined_attr <- combined_sum %>%
   group_by(dtxsid) %>%
   summarise(
-    tier1meas = "Profiled",
+    tier1meas = "Tested",
     tier1pos = list(source_signature[tier1_positive]),
     tier1sel = list(source_signature[tier1_positive & tier1_selective]),
     tier2meas = list(source_signature[tier1_positive & tier1_selective & n_toxcast_meas >= 2]),
@@ -270,7 +270,7 @@ combined_attr <- combined_sum %>%
 # generate color palettes
 labels_attr <- c(
   unique(combined_sum$source_signature),
-  "Multiple", "Profiled", "Negative", "Active Only", "Insufficient\nOrthogonal Data"
+  "Multiple", "Tested", "Negative", "Active Only", "Insufficient\nOrthogonal Data"
 )
 fill_attr <- c(
   RColorBrewer::brewer.pal(6, "Dark2")[c(1, 3, 5, 2, 4, 6)],
@@ -343,7 +343,7 @@ plot_attr <- combined_attr %>%
     curvature = -0.4
   ) +
   geom_text(
-    aes(x = 5, y = 80, label = "Prioritized for\nProspective\nProfiling"),
+    aes(x = 5, y = 80, label = "Prioritized for\nProspective\nScreening"),
     color = "navy",
     size = 2.5,
     hjust = 0,
@@ -359,7 +359,7 @@ plot_attr <- combined_attr %>%
     values = color_attr, breaks = labels_attr[1:6], na.value = "white"
   ) +
   scale_x_discrete(labels = c(
-    "Tier 1\nProfiled",
+    "Tier 1\nTested",
     "Tier 1\nActive",
     "Tier 1\nActive + Selective",
     "Tier 2\nActive",
@@ -553,7 +553,8 @@ ggsave(
 In order to examine the extent to which Tier 1 targeted assessments fail to 
 prioritize targeted perturbagens, Tier 2 potency estimates for chemicals with a
 negative Tier 1 outcome and a positive or selective Tier 2 outcome are compared
-to those with a positive or selective Tier 1 outcome via Kruskal-Wallis tests.
+to those with a positive or selective Tier 1 outcome via Wilcoxon rank-sum
+tests.
 
 ```{r compare-mismatch-outcome}
 # get summary of true/false negatives
@@ -686,7 +687,7 @@ plot_mismatch_pos <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Activity Result",
     title = "Tier 2 Active Only"
   ) +
   theme_bw() +
@@ -732,7 +733,7 @@ plot_mismatch_sel <- combined_sum %>%
   ) +
   scale_x_continuous(limits = tier2_lim) +
   labs(
-    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Outcome",
+    x = expression(log[10](POD[ortho])), y = "RCAS", color = "Tier 1 Activity Result",
     title = "Tier 2 Active + Selective"
   ) +
   theme_bw() +
@@ -943,7 +944,7 @@ cor_bpac2 %>%
 
 plot_bpac2 <- plotPods(combined_sum, cor_bpac2, "modl_acc_5", "BPAC2", tier2 = FALSE)
 ggsave(
-  paste0(dir_home, "output/FigS4.png"), plot_bpac2,
+  paste0(dir_home, "output/FigS7.png"), plot_bpac2,
   width = 1400, height = 480, units = "px", bg = "white", scale = 2
 )
 ```

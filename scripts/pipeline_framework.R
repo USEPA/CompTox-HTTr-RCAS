@@ -164,7 +164,8 @@ runFramework <- function(
                     threshold_1sd, tier1_positive, tier1_selective,
                     n_toxcast_meas, modl_acc_5, specific_crit_1, specific_crit_2
                 ),
-                ~ unique(.x[!is.na(.x)])
+                # ~ unique(.x[!is.na(.x)])
+                unique
             ),
             across(c(modl_acc, modl_acc_mode, modl_acc_sd), ~ min(.x, na.rm = TRUE)),
             across(c(tier2_positive, tier2_selective, tier2_conflict), any),

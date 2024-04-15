@@ -96,9 +96,6 @@ filterSupport <- function(refchemdb, support_lvl) {
         group_by(dsstox_substance_id, target) %>%
         mutate(
             mode_count = n(),
-            mode_ratio = case_when(
-                mode_count == 2 ~ max(support) / min(support), TRUE ~ 0
-            ),
             mode_keep = case_when(
                 mode_count == 1 ~ TRUE,
                 mode_count == 2 & support == max(support) ~ TRUE,

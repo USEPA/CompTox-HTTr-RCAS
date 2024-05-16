@@ -722,6 +722,15 @@ refchem_export <- composite_heparg$ref %>%
 openxlsx::write.xlsx(refchem_export, "output/TableS1.xlsx")
 ```
 
+```{r export-rcas}
+rcas_export <- composite_all %>%
+  mutate(rcas = paste0(source, "_", class_1)) %>%
+  rename(gene = variable) %>%
+  select(rcas, gene, mean_bmd_log, mean_bmd_diff, n_sig, prop_sig)
+
+openxlsx::write.xlsx(rcas_export, "output/TableS2.xlsx")
+```
+
 ```{r reproducibility}
 sessionInfo()
 ```

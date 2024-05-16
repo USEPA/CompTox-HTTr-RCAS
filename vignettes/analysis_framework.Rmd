@@ -1214,7 +1214,7 @@ totals_combined <- left_join(
 ) %>%
   rename(rcas = source_signature) %>%
   select(-c(method, alternative))
-openxlsx::write.xlsx(totals_combined, "output/TableS2.xlsx")
+openxlsx::write.xlsx(totals_combined, "output/TableS3.xlsx")
 ```
 
 ```{r reproducibility}

@@ -582,7 +582,7 @@ colnames(export_prosp) <- c(
   "rcas", "dtxsid", "name", "rcas_bmd_log",
   "ns1_log", "outcome_tier1", "n_toxcast_meas", "profiled_endpoint"
 )
-openxlsx::write.xlsx(export_prosp, "output/TableS3.xlsx")
+openxlsx::write.xlsx(export_prosp, "output/TableS4.xlsx")
 ```
 
 ```{r reproducibility}

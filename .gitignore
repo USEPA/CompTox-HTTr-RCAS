@@ -5,4 +5,5 @@ data/examples/invitrodb_*
 output/*.png
 data/ccd_structures/*
 joe_mcf7_ph1/*
+joe_rcas_cpp5/*
 laura_gr_s1500/*

@@ -308,6 +308,33 @@ ht_u2os <- plotHeatmap(
 draw(ht_u2os, merge_legend = TRUE, heatmap_legend_side = "bottom")
 ```
 
+## Compare overlap of genes across RCAS
+
+```{r compare-overlap}
+# get unique rcas for each gene
+composite_overlap <- composite_all %>%
+  mutate(rcas = paste0(source, "_", class_1)) %>%
+  group_by(variable) %>%
+  summarise(rcas_list = list(rcas))
+
+plot_overlap <- ggplot(composite_overlap, aes(x = rcas_list)) +
+  geom_bar() +
+  ggupset::scale_x_upset() +
+  geom_text(stat = "count", aes(label = ..count..), family = "Helvetica", vjust = -1) +
+  scale_y_continuous(limits = c(0, 600)) +
+  labs(x = "RCAS", y = "# Genes") +
+  theme_bw() +
+  th +
+  ggupset::theme_combmatrix(combmatrix.label.text = element_text(family = "Helvetica")) +
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 3), "cm"))
+ggsave(
+  "output/FigSX.png", plot_overlap,
+  width = 960, height = 720, units = "px", scale = 2, bg = "white"
+)
+```
+
+![](output/FigSX.png)
+
 # Profile RCAS
 
 Resulting RCAS for each reference class are subsequently used to profile

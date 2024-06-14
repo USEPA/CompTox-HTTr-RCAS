@@ -1,0 +1,214 @@
+---
+title: "RCAS Generation and Concentration-Response Profiling: PPAR isoforms"
+author: "Jesse Rogers"
+date: "June 5, 2024"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: show
+---
+
+Extraction and analyis of Reference Class Associated Signatures (RCAS)
+using U-2 OS and HepaRG chemical screening data. Specific isoforms of PPAR
+(alpha, gamma, delta) are separated manually to investigate whether individual
+isoforms may generate robust RCAS versus as a single class.
+
+# Setup Environment
+
+```{r env-setup, message=FALSE}
+# import packages for visualization
+# (note that other required packages will be imported by R scripts)
+library(ggplot2)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+
+# set directories (`dir_home` should be set to the top-level directory)
+dir_home <- "~/NAM-integration/NAM-integration-pilot-packaged/"
+dir_scripts <- paste0(dir_home, "scripts/")
+setwd(dir_home)
+
+# import scripts for RCAS generation and profiling
+source(paste0(dir_scripts, "pipeline_refchem_assignment.R"))
+source(paste0(dir_scripts, "pipeline_RCAS_generation.R"))
+source(paste0(dir_scripts, "pipeline_RCAS_profiling.R"))
+
+path_rcas <- c(
+  paste0(dir_home, "data/examples/rcas_heparg_gene_bnd.RData"),
+  paste0(dir_home, "data/examples/rcas_u2os_gene_bnd.RData")
+)
+
+# import rcas objects
+composite_heparg <- selectRCASGenes(path_rcas[1])
+composite_u2os <- selectRCASGenes(path_rcas[2])
+
+th <- theme(text = element_text(family = "Helvetica"))
+```
+
+# Assign PPAR Agonists to Individual Reference Classes
+
+The PPAR agonists found in existing `rcas` objects are divided using the 
+RefChemDB S12 table. Specifically, the table is filtered for support>=5, and 
+inclusion of PPAR as a target. Chemicals with multiple PPAR entries are assigned
+to the isoform with greating support if there is an intended primary MoA, 
+i.e. are drugs for a particular isoform.
+
+```{r assign-refchems}
+# get union of refchems from rcas objects
+ref <- rbind(
+  select(composite_heparg$httr.wide, dtxsid, ref_class),
+  select(composite_u2os$httr.wide, dtxsid, ref_class)
+)
+ref <- distinct(ref, dtxsid, .keep_all = TRUE)
+
+# import refchemdb and filter for support/multiple modes
+refchemdb <- loadRefChemDB(
+  homedir = dir_home,
+  filename = "NIHMS1537541-supplement-Supplement1.xlsx",
+  sheet = "S12 Data",
+  fileurl = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6784312/bin/NIHMS1537541-supplement-Supplement1.xlsx"
+)
+refchem_filt <- filterSupport(refchemdb, support = 5)
+
+# filter for PPAR agonists in ref + annotate with highest support label
+refchem_ppar <- filter(
+  refchem_filt,
+  dsstox_substance_id %in% ref$dtxsid[ref$ref_class == "PPAR_Agonist"] &
+  mode == "Positive"
+)
+# plot support levels per target
+plot_refchem <- ggplot(
+  refchem_ppar,
+  aes(support, stringr::str_trunc(name, 30), fill = target_mode, label = support)
+) +
+  geom_col() +
+  geom_text(
+    position = position_stack(vjust = 0.5),
+    family = "Helvetica"
+  ) +
+  labs(x = "RefChemDB Support", y = "Reference Chemical", fill = "Target") +
+  theme_bw() +
+  th
+plot_refchem
+
+# assign dtxsids based on relative majority
+## DTXSID6040745 (L-165041) assigned to PPARD
+## DTXSID4020290 (Pirinixic acid) assigned to PPARA
+## DTXSID3029869 (Bezafibrate) assigned to PPARA
+refchem_ppar <- refchem_ppar %>%
+  group_by(dsstox_substance_id) %>%
+  mutate(target_count = n()) %>%
+  ungroup() %>%
+  mutate(
+    target_ppar = case_when(
+      target_count == 1 ~ target_mode,
+      dsstox_substance_id == "DTXSID6040745" ~ "PPARD_Positive",
+      dsstox_substance_id == "DTXSID4020290" ~ "PPARA_Positive",
+      dsstox_substance_id == "DTXSID3029869" ~ "PPARA_Positive"
+    ),
+    target_ppar = gsub("_Positive", "_Agonist", target_ppar)
+  )
+table(distinct(refchem_ppar, dsstox_substance_id, target_ppar)$target_ppar)
+
+# assign new labels to ref
+ref <- mutate(
+  ref, ref_class = case_when(
+    dtxsid %in% refchem_ppar$dsstox_substance_id ~ refchem_ppar$target_ppar[
+      match(dtxsid, refchem_ppar$dsstox_substance_id)
+    ],
+    TRUE ~ ref_class
+  )
+)
+# drop targets with <3 chemicals (i.e. PPARD/G)
+ref <- filter(ref, !ref_class %in% c("PPARD_Agonist", "PPARG_Agonist"))
+```
+
+# Run RCAS with Isoform-Specific Labels
+
+```{r run-rcas, eval=FALSE}
+# specify paths for httr gene-level potency estimates
+path_httr <- c(
+  "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_heparg2d_toxcast_pfas_pe1_normal_0.05_conthits.RData",
+  "/ccte/projects1/HTTr/screen_gene_cr/GENE_CR_u2os_toxcast_pfas_pe1_normal_0.05_conthits.RData"
+)
+# step through RCAS generation
+httr <- loadData(path_httr[1], bmd.low.bnd = 0.1, bmd.up.bnd = 10)
+httr.filtered <- filterData(httr, ref, col.type = "gene")
+httr.wide <- widenData(httr.filtered, ref, col.type = "gene", metric.fill = 2.5)
+aov.return <- calcANOVA(httr.wide)
+posthoc.return <- calcPosthoc(httr.wide, aov.return$aov.p.adjust)
+bmd <- filter(
+  httr, gene %in% posthoc.return$posthoc.vars & dtxsid %in% httr.wide$dtxsid
+) %>%
+  mutate(ref_class = httr.wide$ref_class[match(dtxsid, httr.wide$dtxsid)])
+rcas <- list(
+  ref = ref,
+  httr.wide = httr.wide,
+  aov.estimate = aov.return,
+  posthoc.estimate = posthoc.return,
+  bmd = bmd
+)
+save(rcas, file = paste0(dir_home, "heparg_ppar/rcas_heparg_ppar.RData"))
+```
+
+```{r rcas-genes}
+# conduct final gene selection + display summary table
+composite <- selectRCASGenes(paste0(dir_home, "heparg_ppar/rcas_heparg_ppar.RData"))
+
+composite$composite %>%
+  count(class_1) %>%
+  rename(class = class_1, size = n) %>%
+  DT::datatable()
+
+posthoc_ppar <- composite$posthoc.estimate$posthoc.sig %>%
+  filter(class_1 == "PPARA_Agonist")
+
+posthoc_ppar %>%
+  rename(class = class_1) %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 3))) %>%
+  arrange(mean_1) %>%
+  DT::datatable()
+
+# grab BMCs for genes identified towards PPAR in posthoc
+httr_ppar <- composite$httr.wide %>%
+  select(dtxsid, name, ref_class, all_of(unique(posthoc_ppar$variable))) %>%
+  pivot_longer(
+    all_of(unique(posthoc_ppar$variable)),
+    names_to = "gene",
+    values_to = "bmd_log"
+  ) %>%
+  mutate(ppar_class = case_when(
+    ref_class == "PPARA_Agonist" ~ "PPARA_Agonist", TRUE ~ "Other Class"
+  ))
+
+# plot BMCs by ref_class
+plot_bmc <- ggplot(
+  httr_ppar, aes(bmd_log, gene, color = ppar_class)
+) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(
+    alpha = 0.8,
+    position = position_jitterdodge(jitter.width = 0.05)
+  ) +
+  labs(x = "log10(BMC)", y = "Gene", color = "Reference\nClass") +
+  theme_bw() +
+  th
+plot_bmc
+
+plot_all <- cowplot::plot_grid(
+  plot_refchem, plot_bmc,
+  labels = c("A", "B"), ncol = 1, align = "v", axis = "lrtb"
+)
+ggsave(
+  paste0(dir_home, "output/FigSX3.png"),
+  width = 960, height = 960, units = "px", scale = 2
+)
+```
+
+```{r reproducibility}
+sessionInfo()
+```

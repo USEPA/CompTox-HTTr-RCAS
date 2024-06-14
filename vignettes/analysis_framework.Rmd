@@ -1021,8 +1021,8 @@ compileTargetData <- function(combined_full, rcas, struct) {
       ),
       signature_s = as.character(signature_f),
       name_label = case_when(
-        tolower(gsub(",", "-", name)) %in% names(struct) |
-          chem_category == "in-class reference" ~ name,
+        tolower(gsub(",", "-", name)) %in% struct ~ name,# |
+          # chem_category == "in-class reference" ~ name,
         TRUE ~ ""
       )
     ) %>%
@@ -1046,7 +1046,7 @@ plotCandidates <- function(combined_proc) {
     geom_line(
       data = filter(combined_proc, metric != "bmd_log"),
       aes(x = aenms_specific, y = value, color = signature_f, group = acc_rank),
-      alpha = 0.8, position = position_dodge(width = .7)
+      alpha = 0.8, position = position_dodge(width = .7), show.legend = TRUE
     ) +
     geom_point(
       data = combined_proc,
@@ -1055,7 +1055,8 @@ plotCandidates <- function(combined_proc) {
         color = signature_f, group = acc_rank, shape = metric
       ),
       size = 2, alpha = 0.8, fill = "white",
-      position = position_dodge(width = .7)
+      position = position_dodge(width = .7),
+      show.legend = TRUE
     ) +
     scale_x_upset(order_by = "degree", sets = plot_set) +
     geom_text_repel(
@@ -1065,16 +1066,18 @@ plotCandidates <- function(combined_proc) {
         color = signature_f, group = acc_rank, label = name_label
       ),
       position = position_dodge(width = 0.7),
-      max.overlaps = 50,
+      max.overlaps = 20,
       size = 3,
       min.segment.length = 0,
       box.padding = 1,
       segment.curvature = 0.4,
       segment.ncp = 3,
       segment.angle = 20,
+      ylim = c(-3.5, -0.5),
       segment.linetype = 3,
       family = "Helvetica"
     ) +
+    scale_y_continuous(limits = c(-3.5, 2.1)) +
     scale_color_manual(
       values = c(
         "grey50",
@@ -1133,49 +1136,67 @@ struct_plot[["RAR"]] <- cowplot::plot_grid(
   label_fontface = "plain", label_size = 10, label_fontfamily = "Helvetica",
   label_x = 0.5, label_y = 1, hjust = 0.5
 )
+
+# specify chemical labels by those named in manuscript (in lieu of pngs)
+struct_ms <- c(
+  "menadione", "2-aminoanthraquinone", "2-naphthalenol",
+  "1-4-diaminoanthraquinone", "1-naphthol", "2-ethylanthraquinone", "1-4-benzoquinone",
+  "dichlone", "1-4-dihydroxyanthracene-9-10-dione",
+  "3-hydroxyfluorene", "fluorometholone", "medroxyprogesterone acetate",
+  "budesonide", "trilostane", "triflumizole", "fusilazole", "imazalil",
+  "prochloraz", "etoxazole", "aldrin", "endrin", "lindane"
+)
 ```
 
 ```{r plot-candidates, class.source = 'fold-hide', fig.width=8, fig.height=12}
 plots_candidate <- list()
 for (target in unique(combined_full$source_signature)) {
   if (target != "heparg_hERG_Inhibitor") {
-    combined_target <- compileTargetData(combined_full, target, structs)
+    combined_target <- compileTargetData(combined_full, target, struct_ms)
     plots_candidate[[target]] <- plotCandidates(combined_target)
   }
 }
 
 # pull legend for separate panel
-lgd <- cowplot::get_legend(
+lgd <- cowplot::get_plot_component(
   plots_candidate[["heparg_AHR_Agonist"]] +
     theme(legend.position = "right") +
     guides(
       shape = guide_legend(nrow = 1, title = "Metric", label.hjust = 0),
       color = guide_legend(
-        title = "Chemical Type", override.aes = list(label = "", alpha = 1)
+        title = "Chemical Type", ncol = 2, override.aes = list(label = "", alpha = 1)
       ),
-    )
+    ),
+    "guide-box-right", return_all = TRUE
 )
 # combine figure panels (Fig. 5)
 plots_candidate_struct <- cowplot::plot_grid(
-  plots_candidate[["heparg_AHR_Agonist"]] + theme(legend.position = "none"),
-  struct_plot[["AHR"]],
-  plots_candidate[["u2os_NR3C1_Agonist"]] + theme(legend.position = "none"),
-  struct_plot[["GR"]],
-  plots_candidate[["heparg_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
-  struct_plot[["RAR"]],
-  plots_candidate[["u2os_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
+  cowplot::plot_grid(
+    plots_candidate[["heparg_AHR_Agonist"]] + theme(legend.position = "none"),
+    # struct_plot[["AHR"]],
+    plots_candidate[["u2os_NR3C1_Agonist"]] + theme(legend.position = "none"),
+    # struct_plot[["GR"]],
+    labels = c("A", "B")
+  ),
+  cowplot::plot_grid(
+    plots_candidate[["heparg_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
+    # struct_plot[["RAR"]],
+    plots_candidate[["u2os_RAR_RXR_Agonist"]] + theme(legend.position = "none"),
+    labels = c("C", "D")
+  ),
   lgd,
-  labels = c("A", "", "B", "", "C", "", "D", ""),
+  # labels = c("A", "", "B", "", "C", "", "D", ""),
   label_fontfamily = "Helvetica",
   axis = "btlr",
   align = "v",
-  ncol = 2
+  ncol = 1,
+  rel_heights = c(1, 1, 0.5)
 )
 ggsave(
-  paste0(dir_home, "output/Fig5.png"), plots_candidate_struct,
-  width = 1600, height = 2400, units = "px", scale = 1.6, bg = "white"
+  paste0(dir_home, "output/Fig5_alt.png"), plots_candidate_struct,
+  width = 1600, height = 1600, units = "px", scale = 1.6, bg = "white"
 )
-plots_candidate_struct
+# plots_candidate_struct
 ```
 
 # Reproducibility

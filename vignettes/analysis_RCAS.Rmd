@@ -320,7 +320,7 @@ composite_overlap <- composite_all %>%
 plot_overlap <- ggplot(composite_overlap, aes(x = rcas_list)) +
   geom_bar() +
   ggupset::scale_x_upset() +
-  geom_text(stat = "count", aes(label = ..count..), family = "Helvetica", vjust = -1) +
+  geom_text(stat = "count", aes(label = after_stat(count)), family = "Helvetica", vjust = -1) +
   scale_y_continuous(limits = c(0, 600)) +
   labs(x = "RCAS", y = "# Genes") +
   theme_bw() +

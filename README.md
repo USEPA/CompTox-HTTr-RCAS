@@ -7,7 +7,7 @@ All necessary code for reproducing analyses in [Rogers et. al. *in prep* (Link T
 
 This analysis makes use of several data sources to prioritize chemicals for specific mechanisms-of-action (MoAs): 
 
-1. RefChemDB: semi-automated mining of multiple literature databases for molecular target associations for over 40,000 chemicals
+1. RefChemDB: semi-automated mining of source databases for molecular target associations for over 40,000 chemicals
 2. High-throughput transcriptomics (HTTr): whole transcriptome profiling of 1,201 chemicals in multi-concentration format across HepaRG and U-2 OS cell lines
 3. High-throughput Screening (HTS): targeted receptor-level assay readouts of thousands of chemicals in multi-concentration format from US EPA's ToxCast program
 
@@ -29,13 +29,13 @@ Note that these scripts will generate two directories in the parent folder to yo
 
 See vignettes sub-directory for full examples of code usage. Each R script contains a runtime function for performing steps in the pipeline:
 
-| Order | Script Name | Runtime Function | Intended Usage |
-|-------|-------------|------------------|----------------|
-| 1 | `pipeline_refchem_assignment.R` | `assignRefChems()` | Assign reference chemical clusters from RefChemDB |
-| 2 | `pipeline_RCAS_generation.R` | `analyzeHTrANOVA()` | Generate RCAS from gene-level HTTr data |
-| 3 | `pipeline_RCAS_profiling.R` | `profileRCAS()`| Perform concentration-response profiling of RCAS from HTTr data |
-| 4 | `pipeline_HTS_selection.R` | `selectHTSEndpoints()` | Select orthogonal ToxCast endpoints from InvitroDB with high specificity |
-| 5 | `pipeline_framework.R` | `runFramework()` | Perform target-based hazard assessment of HTTr/ToxCast-profiled chemicals using tiered framework | 
+| Order | Script Name | Runtime Function | Intended Usage | Related Vignette |
+|-------|-------------|------------------|----------------|------------------|
+| 1 | `pipeline_refchem_assignment.R` | `assignRefChems()` | Assign reference chemical clusters from RefChemDB | `analysis_RCAS.Rmd` |
+| 2 | `pipeline_RCAS_generation.R` | `analyzeHTrANOVA()` | Generate RCAS from gene-level HTTr data | `analysis_RCAS.Rmd` |
+| 3 | `pipeline_RCAS_profiling.R` | `profileRCAS()`| Perform concentration-response profiling of RCAS from HTTr data | `analysis_RCAS.Rmd` |
+| 4 | `pipeline_HTS_selection.R` | `selectHTSEndpoints()` | Select orthogonal ToxCast endpoints from InvitroDB with high specificity | `analysis_framework.Rmd` |
+| 5 | `pipeline_framework.R` | `runFramework()` | Perform target-based hazard assessment of HTTr/ToxCast-profiled chemicals using tiered framework | `analysis_framework.Rmd` |
 
 ## Dependencies
 

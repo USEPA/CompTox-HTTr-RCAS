@@ -432,6 +432,7 @@ cr_refchems <- rbind(
 cr_refchems <- cr_refchems %>%
   mutate(
     signature = gsub("_up|_dn", "", signature),
+    ref_class = gsub(" ", "_", ref_class),
     bmd_log = case_when(!is.na(bmd) ~ log10(bmd), TRUE ~ 2.5),
     toc_signed = top_over_cutoff * sign(top),
     pass_bioactivity = hitcall >= 0.9 & top_over_cutoff >= 1.5,

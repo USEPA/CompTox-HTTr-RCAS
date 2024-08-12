@@ -1067,13 +1067,14 @@ plotCandidates <- function(combined_proc) {
       ),
       position = position_dodge(width = 0.7),
       max.overlaps = 20,
-      size = 3,
+      size = 3.4,
       min.segment.length = 0,
       box.padding = 1,
+      # point.padding = 0.01,
       segment.curvature = 0.4,
-      segment.ncp = 3,
-      segment.angle = 20,
-      ylim = c(-3.5, -0.5),
+      # segment.ncp = 3,
+      # segment.angle = 20,
+      ylim = c(-4, 0),
       segment.linetype = 3,
       family = "Helvetica"
     ) +
@@ -1140,7 +1141,7 @@ struct_plot[["RAR"]] <- cowplot::plot_grid(
 # specify chemical labels by those named in manuscript (in lieu of pngs)
 struct_ms <- c(
   "menadione", "2-aminoanthraquinone", "2-naphthalenol",
-  "1-4-diaminoanthraquinone", "1-naphthol", "2-ethylanthraquinone", "1-4-benzoquinone",
+  "1-4-diaminoanthraquinone", "1-naphthol", "1-4-benzoquinone",
   "dichlone", "1-4-dihydroxyanthracene-9-10-dione",
   "3-hydroxyfluorene", "fluorometholone", "medroxyprogesterone acetate",
   "budesonide", "trilostane", "triflumizole", "fusilazole", "imazalil",

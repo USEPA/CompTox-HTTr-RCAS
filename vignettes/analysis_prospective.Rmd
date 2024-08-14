@@ -555,8 +555,9 @@ plot_all <- cowplot::plot_grid(
   labels = c("A", "B"), nrow = 2, label_fontfamily = "Helvetica"
 )
 ggsave(
-  paste0(dir_home, "output/Fig6.png"), plot_all,
-  width = 720, height = 960, units = "px", scale = 2, bg = "white"
+  paste0(dir_home, "output/Fig6.tiff"), plot_all,
+  width = 1440, height = 1920, units = "px", bg = "white",
+  device = "tiff", compression = "lzw"
 )
 ```
 

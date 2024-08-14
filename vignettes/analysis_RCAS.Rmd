@@ -505,8 +505,8 @@ lgd_bmd <- Legend(
 )
 
 # plot combined panels (Figure 1)
-png(
-  filename = paste0(dir_home, "output/Fig1.png"),
+tiff(
+  filename = paste0(dir_home, "output/Fig1.tiff"), compression = "lzw",
   width = 2000, height = 2400, units = "px", res = 300
 )
 grid::pushViewport(viewport(

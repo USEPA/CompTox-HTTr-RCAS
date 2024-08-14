@@ -559,8 +559,9 @@ plot_fig2 <- cowplot::plot_grid(
   label_fontfamily = "Helvetica"
 )
 ggsave(
-  paste0(dir_home, "output/Fig2.png"), plot_fig2,
-  width = 1000, height = 1400, units = "px", scale = 2, bg = "white"
+  paste0(dir_home, "output/Fig2.tiff"), plot_fig2,
+  width = 2000, height = 2800, units = "px", bg = "white",
+  device = "tiff", compression = "lzw"
 )
 ```
 
@@ -775,8 +776,9 @@ plot_mismatch_all <- cowplot::plot_grid(
 )
 
 ggsave(
-  paste0(dir_home, "output/Fig3.png"), plot_mismatch_all,
-  width = 1200, height = 720, units = "px", scale = 2, bg = "white"
+  paste0(dir_home, "output/Fig3.tiff"), plot_mismatch_all,
+  width = 2250, height = 1440, units = "px", bg = "white",
+  device = "tiff", compression = "lzw"
 )
 plot_mismatch_all
 ```
@@ -921,7 +923,7 @@ plotPods <- function(combined_sum, cor_rcas, col_compare, label_compare, tier2 =
     scale_y_continuous(limits = c(-3, 3)) +
     theme_bw() +
     th +
-    theme(legend.position = "bottom") +
+    theme(legend.position = "bottom", strip.text.x = element_text(size = 7.5)) +
     guides(label = "none")
 
   if (tier2) {
@@ -943,8 +945,9 @@ plot_pod_all <- cowplot::plot_grid(
   nrow = 2, labels = c("A", "B"), label_fontfamily = "Helvetica"
 )
 ggsave(
-  paste0(dir_home, "output/Fig4.png"), plot_pod_all,
-  width = 1400, height = 1100, units = "px", bg = "white", scale = 2
+  paste0(dir_home, "output/Fig4.tiff"), plot_pod_all,
+  width = 2250, height = 1767, units = "px", bg = "white",
+  device = "tiff", compression = "lzw"
 )
 
 plot_pod_all
@@ -1067,18 +1070,18 @@ plotCandidates <- function(combined_proc) {
       ),
       position = position_dodge(width = 0.7),
       max.overlaps = 20,
-      size = 3.4,
+      size = 3.2,
       min.segment.length = 0,
-      box.padding = 1,
-      # point.padding = 0.01,
+      box.padding = 0.3,
+      point.padding = 0.1,
       segment.curvature = 0.4,
       # segment.ncp = 3,
       # segment.angle = 20,
-      ylim = c(-4, 0),
+      ylim = c(-1.9, -0.5),
       segment.linetype = 3,
       family = "Helvetica"
     ) +
-    scale_y_continuous(limits = c(-3.5, 2.1)) +
+    # scale_y_continuous(limits = c(-3.5, 2.1)) +
     scale_color_manual(
       values = c(
         "grey50",
@@ -1141,7 +1144,7 @@ struct_plot[["RAR"]] <- cowplot::plot_grid(
 # specify chemical labels by those named in manuscript (in lieu of pngs)
 struct_ms <- c(
   "menadione", "2-aminoanthraquinone", "2-naphthalenol",
-  "1-4-diaminoanthraquinone", "1-naphthol", "1-4-benzoquinone",
+  "1-naphthol", "1-4-benzoquinone",
   "dichlone", "1-4-dihydroxyanthracene-9-10-dione",
   "3-hydroxyfluorene", "fluorometholone", "medroxyprogesterone acetate",
   "budesonide", "trilostane", "triflumizole", "fusilazole", "imazalil",
@@ -1194,8 +1197,9 @@ plots_candidate_struct <- cowplot::plot_grid(
   rel_heights = c(1, 1, 0.5)
 )
 ggsave(
-  paste0(dir_home, "output/Fig5_alt.png"), plots_candidate_struct,
-  width = 1600, height = 1600, units = "px", scale = 1.6, bg = "white"
+  paste0(dir_home, "output/Fig5_alt.tiff"), plots_candidate_struct,
+  width = 2250, height = 2500, units = "px", bg = "white",
+  device = "tiff", compression = "lzw"
 )
 # plots_candidate_struct
 ```

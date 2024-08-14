@@ -3,6 +3,7 @@ data/input/*
 data/output/*
 data/examples/invitrodb_*
 output/*.png
+output/*.tiff
 data/ccd_structures/*
 joe_mcf7_ph1/*
 joe_rcas_cpp5/*

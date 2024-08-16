@@ -770,7 +770,8 @@ plot_mismatch_all <- cowplot::plot_grid(
     rel_widths = c(1, 0.65)
   ),
   cowplot::plot_grid(
-    NULL, cowplot::get_legend(plot_mismatch_sel), rel_widths = c(0.2, 1)
+    NULL, cowplot::get_plot_component(plot_mismatch_sel, "guide-box-bottom"),
+    rel_widths = c(0.2, 1)
   ),
   nrow = 2, rel_heights = c(1, 0.2)
 )
